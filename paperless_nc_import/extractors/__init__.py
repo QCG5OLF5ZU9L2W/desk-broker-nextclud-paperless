@@ -5,6 +5,7 @@ from .generic_text import GenericTextExtractor
 from .paddleocr_sidecar import PaddleOCRSidecarExtractor
 from .invoice2data_adapter import Invoice2DataExtractor
 from .paddleocr_layout_amount import PaddleOCRLayoutAmountExtractor
+from .paddleocr_layout_date import PaddleOCRLayoutDateExtractor
 from .structured_invoice import StructuredInvoiceExtractor
 
 
@@ -13,6 +14,7 @@ def extractor_chain() -> list:
         StructuredInvoiceExtractor(),
         Invoice2DataExtractor(),
         PaddleOCRLayoutAmountExtractor(),
+        PaddleOCRLayoutDateExtractor(),
         GenericTextExtractor(),
         PaddleOCRSidecarExtractor(),
     ]

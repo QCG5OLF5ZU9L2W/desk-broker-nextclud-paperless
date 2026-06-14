@@ -15,7 +15,7 @@ from .paperless_client import PaperlessClient, PaperlessError
 
 def build_parser() -> ArgumentParser:
     p = ArgumentParser(prog="paperless-nc-import")
-    p.add_argument("files", nargs="*", help="Dateien oder Ordner. Ohne Argumente wird import.inbox_dir gescannt.")
+    p.add_argument("files", nargs="*", help="Dateien oder Ordner. GUI ohne Treffer öffnet eine Dateiauswahl; Headless ohne Argumente scannt import.inbox_dir.")
     p.add_argument("--config", default=str(default_config_path()), help="Pfad zur YAML-Konfiguration")
     p.add_argument("--gui", action="store_true", help="GUI öffnen")
     p.add_argument("--no-gui", action="store_true", help="Headless importieren")

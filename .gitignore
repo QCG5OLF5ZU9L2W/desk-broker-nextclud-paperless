@@ -11,3 +11,6 @@ configs/config.local.yaml
 *.log
 *.pdf
 *.tmp
+invoices-output.json
+.backup-*
+*.bak-*
