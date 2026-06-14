@@ -119,6 +119,40 @@ class ImportWorker(QObject):
             self.failed.emit(str(exc))
 
 
+
+def _desk_broker_log_warning(logger, message: str, *args) -> None:
+    try:
+        text = message % args if args else str(message)
+    except Exception:
+        text = str(message)
+
+    for name in ("warning", "warn", "info", "error", "log"):
+        fn = getattr(logger, name, None)
+        if not callable(fn):
+            continue
+        try:
+            fn(text)
+            return
+        except TypeError:
+            try:
+                fn("WARNING", text)
+                return
+            except Exception:
+                try:
+                    fn(f"WARNING: {text}")
+                    return
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    try:
+        print(f"WARNING: {text}")
+    except Exception:
+        pass
+
+
+
 class MainWindow(QMainWindow):
     def __init__(self, cfg: AppConfig, logger: AppLogger, files: list[Path], *, dry_run: bool, no_cache: bool) -> None:
         super().__init__()
@@ -592,13 +626,13 @@ class MainWindow(QMainWindow):
                 try:
                     self.pdf.show_text(Path(sidecar).read_text(encoding="utf-8", errors="replace"))
                 except Exception as view_exc:
-                    self.logger.warning("OCR-Textanzeige konnte nicht aktualisiert werden: %s", view_exc)
+                    _desk_broker_log_warning(self.logger, "OCR-Textanzeige konnte nicht aktualisiert werden: %s", view_exc)
             self._clear_extraction_text_cache()
             self._prefill_document_date_from_extraction()
             if self.selected_custom_field:
                 self._open_custom_field(self.selected_custom_field)
         except Exception as exc:
-            self.ocr_status.setText(f"OCR-Ergebnis konnte nicht angezeigt werden: {exc}")
+            self.ocr_status.setText(f"OCR fertig; Textanzeige nicht verfügbar: {exc}")
 
     def ocr_failed(self, message: str) -> None:
         self.ocr_run_btn.setEnabled(True)
@@ -1132,7 +1166,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(50, lambda: self.run_ocr(False))
         except Exception as exc:
             try:
-                self.logger.warning("Auto-OCR konnte nicht gestartet werden: %s", exc)
+                _desk_broker_log_warning(self.logger, "Auto-OCR konnte nicht gestartet werden: %s", exc)
             except Exception:
                 pass
 
@@ -1204,16 +1238,16 @@ def _desk_broker_prefill_document_date_from_extraction(self) -> None:
 
         try:
             created_widget.note.setText(
-                f"Dokumentdatum aus Extraktion gesetzt: {extracted_date.isoformat()} "
+                f"Dokumentdatum erkannt und übernommen: {extracted_date.isoformat()} "
                 f"({getattr(match, 'extractor', '')}, {getattr(match, 'label_normalized', '')}, "
-                f"Confidence {float(getattr(match, 'confidence', 0.0) or 0.0):.2f})"
+                f"Sicherheit {float(getattr(match, 'confidence', 0.0) or 0.0):.2f})"
             )
         except Exception:
             pass
 
     except Exception as exc:
         try:
-            self.logger.warning("Dokumentdatum-Extraktion fehlgeschlagen: %s", exc)
+            _desk_broker_log_warning(self.logger, "Dokumentdatum-Extraktion fehlgeschlagen: %s", exc)
         except Exception:
             pass
 
@@ -1256,13 +1290,97 @@ def _desk_broker_auto_run_ocr_if_missing_text_layer(self) -> None:
 
     except Exception as exc:
         try:
-            self.logger.warning("Auto-OCR konnte nicht gestartet werden: %s", exc)
+            _desk_broker_log_warning(self.logger, "Auto-OCR konnte nicht gestartet werden: %s", exc)
         except Exception:
             pass
 
 
 MainWindow._prefill_document_date_from_extraction = _desk_broker_prefill_document_date_from_extraction
 MainWindow._auto_run_ocr_if_missing_text_layer = _desk_broker_auto_run_ocr_if_missing_text_layer
+
+# Desk Broker runtime MainWindow date helpers
+def _desk_broker_prefill_document_date_from_extraction(self) -> None:
+    try:
+        extraction_cfg = getattr(self.cfg, "extraction", None)
+        if not extraction_cfg or not getattr(extraction_cfg, "enabled", False):
+            return
+        if not getattr(self, "current_info", None):
+            return
+
+        from datetime import date
+        from ..extraction import extract_custom_field_value
+
+        try:
+            text = self._current_extraction_text()
+        except Exception:
+            text = ""
+
+        info = self.current_info
+        current_path = getattr(info, "current_path", None)
+        path_value = str(current_path) if current_path else ""
+        filename = current_path.name if current_path else ""
+
+        custom_cfg = getattr(self.cfg, "custom", None)
+        rules = getattr(custom_cfg, "custom_field_extraction_rules", [])
+
+        match = extract_custom_field_value(
+            field_id=0,
+            field_name="Dokumentdatum",
+            field_type="date",
+            text=text or "",
+            rules=rules,
+            sources={
+                "ocr_text": text or "",
+                "document_text": text or "",
+                "title": self.title_edit.text() if hasattr(self, "title_edit") else "",
+                "filename": filename,
+                "path": path_value,
+                "paddleocr": {"enabled": True, "run_policy": "on_demand"},
+            },
+            field_role="date.invoice",
+            locale=getattr(extraction_cfg, "locale", "de"),
+            use_builtin_rulesets=True,
+        )
+
+        if not match or not getattr(match, "value", None):
+            return
+
+        try:
+            extracted_date = date.fromisoformat(str(match.value))
+        except Exception:
+            return
+
+        created_widget = getattr(self, "created_widget", None)
+        if not created_widget:
+            return
+
+        try:
+            current_date = created_widget.get_date()
+        except Exception:
+            current_date = None
+
+        if current_date == extracted_date:
+            return
+
+        created_widget.set_date(extracted_date)
+
+        try:
+            created_widget.note.setText(
+                f"Dokumentdatum erkannt und übernommen: {extracted_date.isoformat()} "
+                f"({getattr(match, 'extractor', '')}, {getattr(match, 'label_normalized', '')}, "
+                f"Sicherheit {float(getattr(match, 'confidence', 0.0) or 0.0):.2f})"
+            )
+        except Exception:
+            pass
+
+    except Exception as exc:
+        try:
+            _desk_broker_log_warning(self.logger, "Dokumentdatum-Extraktion fehlgeschlagen: %s", exc)
+        except Exception:
+            pass
+
+
+MainWindow._prefill_document_date_from_extraction = _desk_broker_prefill_document_date_from_extraction
 
 def run_gui(cfg: AppConfig, logger: AppLogger, files: list[str], *, dry_run: bool, no_cache: bool) -> int:
     app = QApplication.instance() or QApplication([])
