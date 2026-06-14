@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import re
 
+from .extraction_rulesets import extract_role_candidates, infer_field_role
+
 
 @dataclass(slots=True)
 class CustomFieldExtractionRule:
@@ -34,6 +36,9 @@ class ExtractionMatch:
     raw: str
     rule: CustomFieldExtractionRule
     confidence: float = 1.0
+    role: str = ""
+    label_normalized: str = ""
+    extractor: str = ""
 
 
 _AMOUNT_PATTERN = r"([-+−]?\s*\d{1,3}(?:[.\s]\d{3})*(?:[,.]\d{2})|[-+−]?\s*\d+[,.]\d{2})"
@@ -205,10 +210,12 @@ def extract_custom_field_matches(
     text: str,
     rules: list[CustomFieldExtractionRule],
     sources: dict[str, str] | None = None,
+    field_role: str = "",
+    locale: str = "de",
+    use_builtin_rulesets: bool | None = None,
 ) -> list[ExtractionMatch]:
-    if not rules:
-        return []
-
+    if use_builtin_rulesets is None:
+        use_builtin_rulesets = bool(field_role) or not rules
     matches: list[ExtractionMatch] = []
     for rule in sorted(rules, key=lambda r: int(r.priority)):
         if not _field_matches(rule, field_id=field_id, field_name=field_name, field_type=field_type):
@@ -228,10 +235,53 @@ def extract_custom_field_matches(
             raw = _safe_group(found, rule.group) or (found.group(0) if found else "")
             value = normalize_value(raw, rule.normalize, field_type)
             if value:
-                matches.append(ExtractionMatch(value=value, raw=raw, rule=rule, confidence=1.0))
+                matches.append(
+                    ExtractionMatch(
+                        value=value,
+                        raw=raw,
+                        rule=rule,
+                        confidence=1.0,
+                        role="",
+                        label_normalized=rule.label or "",
+                        extractor=rule.extractor or "regex",
+                    )
+                )
                 # One hit per rule is enough for GUI prefilling; later versions can
                 # expose all candidates if we add a proper review UI.
                 break
+    # If no explicit user/developer rule matched, fall back to project-shipped
+    # role rulesets. These rulesets contain only label anchors (e.g.
+    # "fahrzeugpreis inklusive nebenkosten"), never values or OCR excerpts.
+    if not matches and use_builtin_rulesets:
+        role = (field_role or "").strip() or infer_field_role(
+            field_name=field_name, field_type=field_type, locale=locale
+        )
+        for candidate in extract_role_candidates(
+            role=role, field_type=field_type, text=text, locale=locale
+        ):
+            value = normalize_value(candidate.raw_value, "monetary", field_type)
+            if not value:
+                continue
+            matches.append(
+                ExtractionMatch(
+                    value=value,
+                    raw=candidate.raw_value,
+                    rule=CustomFieldExtractionRule(
+                        field_id=field_id,
+                        field_name=field_name,
+                        field_type=field_type,
+                        source="ocr_text",
+                        extractor="builtin_ruleset",
+                        normalize="monetary",
+                        priority=1000,
+                        label=candidate.label_normalized,
+                    ),
+                    confidence=candidate.confidence,
+                    role=candidate.role,
+                    label_normalized=candidate.label_normalized,
+                    extractor=candidate.extractor,
+                )
+            )
     return matches
 
 
@@ -243,6 +293,9 @@ def extract_custom_field_value(
     text: str,
     rules: list[CustomFieldExtractionRule],
     sources: dict[str, str] | None = None,
+    field_role: str = "",
+    locale: str = "de",
+    use_builtin_rulesets: bool | None = None,
 ) -> ExtractionMatch | None:
     matches = extract_custom_field_matches(
         field_id=field_id,
@@ -251,5 +304,8 @@ def extract_custom_field_value(
         text=text,
         rules=rules,
         sources=sources,
+        field_role=field_role,
+        locale=locale,
+        use_builtin_rulesets=use_builtin_rulesets,
     )
     return matches[0] if matches else None

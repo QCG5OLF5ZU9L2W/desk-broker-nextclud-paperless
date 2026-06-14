@@ -1,0 +1,791 @@
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/configs/config.example.yaml repo_v077/configs/config.example.yaml
+--- repo_v076/configs/config.example.yaml	2026-06-14 03:42:01.000000000 +0000
++++ repo_v077/configs/config.example.yaml	2026-06-14 07:45:18.406780653 +0000
+@@ -159,6 +159,38 @@
+   # true = bei OCR-Fehler Import abbrechen; false = Original trotzdem hochladen.
+   fail_on_error: true
+ 
++extraction:
++  # Rollenbasierte Erkennung aus Projekt-Rulesets. Hier werden keine Regexe gepflegt.
++  # Die Zuordnung bleibt ID-basiert und damit stabil gegen spätere Feldumbenennungen.
++  enabled: true
++  locale: "de"
++  infer_roles_from_field_names: true
++  field_roles:
++    # Beispiel aus Paperless: Rechnungsbetrag [#3, monetary]
++    "3": "amount.total"
++    # Weitere Rollen für spätere Ausbaustufen:
++    # "19": "amount.vat"
++    # "6": "bank.iban"
++
++community_learning:
++  # Vorbereitet für DSGVO-konformes Schwarm-Lernen.
++  # Es dürfen nur reduzierte Label-Rollen-Signale gemeldet werden, nie Werte.
++  enabled: false
++  endpoint: ""
++  consent:
++    granted: false
++    version: 1
++    granted_at: null
++    method: null
++  mode:
++    submit: "ask_each_entry"  # ask_each_entry | queue_and_review | automatic_after_consent
++  privacy:
++    send_values: false
++    send_ocr_text: false
++    send_paths: false
++    send_document_ids: false
++    send_installation_id: false
++
+ gui:
+   enabled: true
+   auto_for_explicit_files: true
+@@ -186,20 +218,10 @@
+   # custom_field_nextcloud_path_id: "14"
+   # custom_field_local_path_id: ""
+ 
+-  # GUI-Vorbelegung aus OCR/PDF-Text. Die ID ist die stabile Zuordnung;
+-  # field_name ist lesbarer Hinweis und Fallback für geteilte Konfigurationen.
+-  custom_field_extraction_rules:
+-    - field_id: "3"
+-      field_name: "Rechnungsbetrag"
+-      field_type: "monetary"
+-      source: "ocr_text"
+-      extractor: "receipt_total"
+-      normalize: "monetary"
+-      priority: 10
+-      # Alternativ/zusätzlich möglich:
+-      # patterns:
+-      #   - "Endsumm?e\\s*€?\\s*([0-9]+[,.][0-9]{2})"
+-      # group: 1
++  # Entwickler-/Migrations-Override. Normale Nutzer sollen hier keine Regexe pflegen.
++  # Für die normale Rechnungserkennung bitte extraction.field_roles und die
++  # Projekt-Rulesets unter paperless_nc_import/rulesets/ verwenden.
++  custom_field_extraction_rules: []
+ 
+   # Rückreferenzen / globale IDs, die nach erfolgreichem Import wieder in
+   # Paperless-Custom-Fields geschrieben werden können.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/community_learning.py repo_v077/paperless_nc_import/community_learning.py
+--- repo_v076/paperless_nc_import/community_learning.py	1970-01-01 00:00:00.000000000 +0000
++++ repo_v077/paperless_nc_import/community_learning.py	2026-06-14 07:46:11.890392441 +0000
+@@ -0,0 +1,90 @@
++from __future__ import annotations
++
++from dataclasses import asdict, dataclass
++from typing import Any
++import re
++
++from .extraction_rulesets import normalize_label
++
++
++@dataclass(slots=True, frozen=True)
++class CommunityLearningSignal:
++    """A GDPR-minimized learning signal.
++
++    This object must never contain document values. It only says that a
++    normalized label anchor was useful for a semantic field role.
++    """
++
++    schema: int
++    locale: str
++    field_role: str
++    field_type: str
++    extractor: str
++    label_normalized: str
++    result: str
++    app_version: str = ""
++
++    def to_payload(self) -> dict[str, Any]:
++        return asdict(self)
++
++
++_BAD_LABEL_PATTERNS = [
++    ("digit", re.compile(r"\d")),
++    ("email", re.compile(r"@")),
++    ("url", re.compile(r"https?://|www\.")),
++    ("path", re.compile(r"[\\/]")),
++    ("iban", re.compile(r"\b[a-z]{2}\s*\d{2}(?:\s*[0-9a-z]){10,}\b", re.IGNORECASE)),
++    ("vat_id", re.compile(r"\bde\s*\d{9}\b", re.IGNORECASE)),
++    ("too_specific_id", re.compile(r"\b[a-z]{1,5}[-_/]?\d{3,}\b", re.IGNORECASE)),
++]
++
++_ALLOWED_RESULTS = {"accepted", "rejected", "corrected"}
++
++
++def unsafe_label_reason(label: str) -> str:
++    normalized = normalize_label(label)
++    if not normalized:
++        return "empty"
++    if len(normalized) < 2:
++        return "too_short"
++    if len(normalized) > 80:
++        return "too_long"
++    for name, pattern in _BAD_LABEL_PATTERNS:
++        if pattern.search(normalized):
++            return name
++    return ""
++
++
++def is_safe_label(label: str) -> bool:
++    return unsafe_label_reason(label) == ""
++
++
++def build_community_signal(
++    *,
++    label: str,
++    field_role: str,
++    field_type: str,
++    extractor: str,
++    result: str,
++    locale: str = "de",
++    app_version: str = "",
++) -> CommunityLearningSignal | None:
++    """Build a safe signal or return None if the label must not leave the client."""
++    normalized = normalize_label(label)
++    if unsafe_label_reason(normalized):
++        return None
++    result_key = (result or "").strip().casefold()
++    if result_key not in _ALLOWED_RESULTS:
++        return None
++    if not field_role or not extractor:
++        return None
++    return CommunityLearningSignal(
++        schema=1,
++        locale=locale,
++        field_role=field_role,
++        field_type=field_type,
++        extractor=extractor,
++        label_normalized=normalized,
++        result=result_key,
++        app_version=app_version,
++    )
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/config.py repo_v077/paperless_nc_import/config.py
+--- repo_v076/paperless_nc_import/config.py	2026-06-14 03:43:23.000000000 +0000
++++ repo_v077/paperless_nc_import/config.py	2026-06-14 07:44:44.385746019 +0000
+@@ -203,6 +203,16 @@
+ 
+ 
+ @dataclass(slots=True)
++class ExtractionConfig:
++    # Project rulesets contain only semantic labels and weights. Field roles map
++    # local Paperless custom field IDs to stable roles, e.g. 3 -> amount.total.
++    enabled: bool = True
++    locale: str = "de"
++    field_roles: dict[int, str] = field(default_factory=dict)
++    infer_roles_from_field_names: bool = True
++
++
++@dataclass(slots=True)
+ class CustomConfig:
+     # Optional stable default mappings. GUI can override them per import.
+     field_nextcloud_web_url_id: int | None = None
+@@ -239,6 +249,7 @@
+     import_: ImportConfig = field(default_factory=ImportConfig)
+     gui: GuiConfig = field(default_factory=GuiConfig)
+     ocr: OcrConfig = field(default_factory=OcrConfig)
++    extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
+     custom: CustomConfig = field(default_factory=CustomConfig)
+     path: Path = field(default_factory=default_config_path)
+ 
+@@ -360,6 +371,21 @@
+     return out
+ 
+ 
++def _as_field_roles(value: Any) -> dict[int, str]:
++    if not isinstance(value, dict):
++        return {}
++    out: dict[int, str] = {}
++    for key, role in value.items():
++        try:
++            field_id = int(key)
++        except (TypeError, ValueError):
++            continue
++        role_text = str(role or "").strip()
++        if role_text:
++            out[field_id] = role_text
++    return out
++
++
+ def _as_deck_routes(value: Any) -> list[DeckRouteConfig]:
+     if not isinstance(value, list):
+         return []
+@@ -411,6 +437,7 @@
+     imp = data.get("import", {}) or {}
+     gui = data.get("gui", {}) or {}
+     ocr = data.get("ocr", {}) or {}
++    extraction = data.get("extraction", {}) or {}
+     custom = data.get("custom", {}) or {}
+ 
+     cfg = AppConfig(path=config_path)
+@@ -509,6 +536,12 @@
+         timeout_seconds=_as_int(ocr.get("timeout_seconds"), 0),
+         fail_on_error=_as_bool(ocr.get("fail_on_error"), True),
+     )
++    cfg.extraction = ExtractionConfig(
++        enabled=_as_bool(extraction.get("enabled"), True),
++        locale=str(extraction.get("locale", "de") or "de"),
++        field_roles=_as_field_roles(extraction.get("field_roles")),
++        infer_roles_from_field_names=_as_bool(extraction.get("infer_roles_from_field_names"), True),
++    )
+     cfg.custom = CustomConfig(
+         field_nextcloud_web_url_id=_optional_int(
+             _first_present(custom, "field_nextcloud_web_url_id", "custom_field_nextcloud_web_url_id")
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/extraction.py repo_v077/paperless_nc_import/extraction.py
+--- repo_v076/paperless_nc_import/extraction.py	2026-06-14 03:46:20.000000000 +0000
++++ repo_v077/paperless_nc_import/extraction.py	2026-06-14 07:46:11.891659425 +0000
+@@ -4,6 +4,8 @@
+ from typing import Any
+ import re
+ 
++from .extraction_rulesets import extract_role_candidates, infer_field_role
++
+ 
+ @dataclass(slots=True)
+ class CustomFieldExtractionRule:
+@@ -34,6 +36,9 @@
+     raw: str
+     rule: CustomFieldExtractionRule
+     confidence: float = 1.0
++    role: str = ""
++    label_normalized: str = ""
++    extractor: str = ""
+ 
+ 
+ _AMOUNT_PATTERN = r"([-+−]?\s*\d{1,3}(?:[.\s]\d{3})*(?:[,.]\d{2})|[-+−]?\s*\d+[,.]\d{2})"
+@@ -205,10 +210,12 @@
+     text: str,
+     rules: list[CustomFieldExtractionRule],
+     sources: dict[str, str] | None = None,
++    field_role: str = "",
++    locale: str = "de",
++    use_builtin_rulesets: bool | None = None,
+ ) -> list[ExtractionMatch]:
+-    if not rules:
+-        return []
+-
++    if use_builtin_rulesets is None:
++        use_builtin_rulesets = bool(field_role) or not rules
+     matches: list[ExtractionMatch] = []
+     for rule in sorted(rules, key=lambda r: int(r.priority)):
+         if not _field_matches(rule, field_id=field_id, field_name=field_name, field_type=field_type):
+@@ -228,10 +235,53 @@
+             raw = _safe_group(found, rule.group) or (found.group(0) if found else "")
+             value = normalize_value(raw, rule.normalize, field_type)
+             if value:
+-                matches.append(ExtractionMatch(value=value, raw=raw, rule=rule, confidence=1.0))
++                matches.append(
++                    ExtractionMatch(
++                        value=value,
++                        raw=raw,
++                        rule=rule,
++                        confidence=1.0,
++                        role="",
++                        label_normalized=rule.label or "",
++                        extractor=rule.extractor or "regex",
++                    )
++                )
+                 # One hit per rule is enough for GUI prefilling; later versions can
+                 # expose all candidates if we add a proper review UI.
+                 break
++    # If no explicit user/developer rule matched, fall back to project-shipped
++    # role rulesets. These rulesets contain only label anchors (e.g.
++    # "fahrzeugpreis inklusive nebenkosten"), never values or OCR excerpts.
++    if not matches and use_builtin_rulesets:
++        role = (field_role or "").strip() or infer_field_role(
++            field_name=field_name, field_type=field_type, locale=locale
++        )
++        for candidate in extract_role_candidates(
++            role=role, field_type=field_type, text=text, locale=locale
++        ):
++            value = normalize_value(candidate.raw_value, "monetary", field_type)
++            if not value:
++                continue
++            matches.append(
++                ExtractionMatch(
++                    value=value,
++                    raw=candidate.raw_value,
++                    rule=CustomFieldExtractionRule(
++                        field_id=field_id,
++                        field_name=field_name,
++                        field_type=field_type,
++                        source="ocr_text",
++                        extractor="builtin_ruleset",
++                        normalize="monetary",
++                        priority=1000,
++                        label=candidate.label_normalized,
++                    ),
++                    confidence=candidate.confidence,
++                    role=candidate.role,
++                    label_normalized=candidate.label_normalized,
++                    extractor=candidate.extractor,
++                )
++            )
+     return matches
+ 
+ 
+@@ -243,6 +293,9 @@
+     text: str,
+     rules: list[CustomFieldExtractionRule],
+     sources: dict[str, str] | None = None,
++    field_role: str = "",
++    locale: str = "de",
++    use_builtin_rulesets: bool | None = None,
+ ) -> ExtractionMatch | None:
+     matches = extract_custom_field_matches(
+         field_id=field_id,
+@@ -251,5 +304,8 @@
+         text=text,
+         rules=rules,
+         sources=sources,
++        field_role=field_role,
++        locale=locale,
++        use_builtin_rulesets=use_builtin_rulesets,
+     )
+     return matches[0] if matches else None
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/extraction_rulesets.py repo_v077/paperless_nc_import/extraction_rulesets.py
+--- repo_v076/paperless_nc_import/extraction_rulesets.py	1970-01-01 00:00:00.000000000 +0000
++++ repo_v077/paperless_nc_import/extraction_rulesets.py	2026-06-14 07:44:12.692003159 +0000
+@@ -0,0 +1,219 @@
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++from importlib import resources
++from typing import Any
++import json
++import re
++import unicodedata
++
++
++AMOUNT_PATTERN = r"([-+−]?\s*\d{1,3}(?:[.\s]\d{3})*(?:[,.]\d{2})|[-+−]?\s*\d+[,.]\d{2})"
++
++
++@dataclass(slots=True, frozen=True)
++class LabelExpression:
++    text: str
++    weight: float = 0.5
++    extractor: str = "label_before_value"
++
++    @property
++    def normalized(self) -> str:
++        return normalize_label(self.text)
++
++
++@dataclass(slots=True, frozen=True)
++class RoleRuleset:
++    schema: int
++    locale: str
++    role: str
++    field_type: str
++    value_type: str = ""
++    version: str = ""
++    labels: list[LabelExpression] = field(default_factory=list)
++
++
++@dataclass(slots=True, frozen=True)
++class RoleExtractionCandidate:
++    role: str
++    field_type: str
++    raw_value: str
++    label_normalized: str
++    extractor: str
++    confidence: float
++
++
++def normalize_label(value: str) -> str:
++    """Normalize a fachlicher Label-Anker for matching and community signals.
++
++    This intentionally does not normalize or keep values. Digits are preserved
++    here because the privacy filter decides what can leave the machine; built-in
++    matching can still tolerate noisy labels. Community upload must call
++    community_learning.is_safe_label().
++    """
++    text = unicodedata.normalize("NFKC", str(value or ""))
++    text = text.casefold()
++    text = text.replace("\u00a0", " ").replace("\u202f", " ")
++    text = re.sub(r"[\s:_=€$£¥]+", " ", text)
++    text = re.sub(r"[^0-9a-zäöüß\- ]+", " ", text)
++    text = re.sub(r"\s+", " ", text).strip(" -")
++    return text
++
++
++def _label_regex(label_normalized: str) -> str:
++    # Match whitespace/OCR spacing flexibly while keeping token order.
++    tokens = [re.escape(tok) for tok in label_normalized.split() if tok]
++    if not tokens:
++        return r"a^"
++    return r"\s+".join(tokens)
++
++
++def _load_ruleset_file(path: resources.abc.Traversable) -> RoleRuleset | None:
++    try:
++        data = json.loads(path.read_text(encoding="utf-8"))
++    except Exception:
++        return None
++    if not isinstance(data, dict) or data.get("schema") != 1:
++        return None
++    labels: list[LabelExpression] = []
++    for item in data.get("labels") or []:
++        if not isinstance(item, dict):
++            continue
++        text = normalize_label(str(item.get("text", "")))
++        if not text:
++            continue
++        try:
++            weight = float(item.get("weight", 0.5))
++        except (TypeError, ValueError):
++            weight = 0.5
++        labels.append(
++            LabelExpression(
++                text=text,
++                weight=max(0.0, min(1.0, weight)),
++                extractor=str(item.get("extractor", "label_before_value") or "label_before_value"),
++            )
++        )
++    return RoleRuleset(
++        schema=1,
++        locale=str(data.get("locale", "de") or "de"),
++        role=str(data.get("role", "") or ""),
++        field_type=str(data.get("field_type", "") or ""),
++        value_type=str(data.get("value_type", "") or ""),
++        version=str(data.get("version", "") or ""),
++        labels=labels,
++    )
++
++
++def load_builtin_rulesets(*, locale: str = "de", role: str = "") -> list[RoleRuleset]:
++    """Load project-shipped rulesets from paperless_nc_import/rulesets/builtin."""
++    root = resources.files("paperless_nc_import").joinpath("rulesets", "builtin", locale)
++    try:
++        files = sorted(p for p in root.iterdir() if p.name.endswith(".json"))
++    except (FileNotFoundError, ModuleNotFoundError):
++        return []
++    out: list[RoleRuleset] = []
++    for path in files:
++        ruleset = _load_ruleset_file(path)
++        if not ruleset or not ruleset.role:
++            continue
++        if role and ruleset.role != role:
++            continue
++        out.append(ruleset)
++    return out
++
++
++_FIELD_ROLE_ALIASES_DE: dict[str, set[str]] = {
++    "amount.total": {
++        "betrag",
++        "brutto",
++        "endsumme",
++        "gesamt",
++        "gesamtbetrag",
++        "gesamtpreis",
++        "kaufpreis",
++        "rechnungssumme",
++        "rechnungsbetrag",
++        "zahlbetrag",
++        "zu zahlen",
++    },
++    "amount.vat": {
++        "mehrwertsteuer",
++        "mwst",
++        "steuerbetrag",
++        "umsatzsteuer",
++        "ust",
++    },
++}
++
++
++def infer_field_role(*, field_name: str, field_type: str, locale: str = "de") -> str:
++    """Infer a semantic role from Paperless field name/type as a fallback.
++
++    The stable mapping should ultimately come from config/extraction.field_roles.
++    Name inference is only a convenience for first use.
++    """
++    if locale != "de":
++        return ""
++    typ = (field_type or "").strip().casefold()
++    name = normalize_label(field_name)
++    if typ and typ != "monetary":
++        return ""
++    for role, aliases in _FIELD_ROLE_ALIASES_DE.items():
++        for alias in aliases:
++            a = normalize_label(alias)
++            if name == a or a in name:
++                return role
++    return ""
++
++
++def extract_role_candidates(
++    *,
++    role: str,
++    field_type: str,
++    text: str,
++    locale: str = "de",
++    max_label_to_value_chars: int = 90,
++) -> list[RoleExtractionCandidate]:
++    """Find value candidates for a semantic role using project rulesets.
++
++    Only label anchors are stored in rulesets. The actual values are read from
++    the local document text and are never needed for community learning.
++    """
++    if not role or not text:
++        return []
++    body = str(text or "").replace("\u00a0", " ").replace("\u202f", " ")
++    rulesets = load_builtin_rulesets(locale=locale, role=role)
++    candidates: list[RoleExtractionCandidate] = []
++    for ruleset in rulesets:
++        if ruleset.field_type and field_type and ruleset.field_type.casefold() != field_type.casefold():
++            continue
++        for label in ruleset.labels:
++            label_norm = label.normalized
++            if not label_norm:
++                continue
++            label_rx = _label_regex(label_norm)
++            pattern = rf"{label_rx}[^\d\-+−]{{0,{int(max_label_to_value_chars)}}}{AMOUNT_PATTERN}\b"
++            try:
++                compiled = re.compile(pattern, re.IGNORECASE | re.MULTILINE | re.DOTALL)
++            except re.error:
++                continue
++            for match in compiled.finditer(body):
++                raw_value = match.group(1)
++                if not raw_value:
++                    continue
++                distance_penalty = min(0.10, max(0, len(match.group(0)) - len(label_norm)) / 1000)
++                candidates.append(
++                    RoleExtractionCandidate(
++                        role=ruleset.role,
++                        field_type=ruleset.field_type or field_type,
++                        raw_value=raw_value,
++                        label_normalized=label_norm,
++                        extractor=label.extractor,
++                        confidence=max(0.0, min(1.0, label.weight - distance_penalty)),
++                    )
++                )
++                # Multiple equal labels in the same document usually repeat the
++                # same semantic concept. Keep candidates concise for GUI prefill.
++                break
++    candidates.sort(key=lambda c: c.confidence, reverse=True)
++    return candidates
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/gui/main_window.py repo_v077/paperless_nc_import/gui/main_window.py
+--- repo_v076/paperless_nc_import/gui/main_window.py	2026-06-14 03:46:23.000000000 +0000
++++ repo_v077/paperless_nc_import/gui/main_window.py	2026-06-14 07:46:11.893003435 +0000
+@@ -704,16 +704,17 @@
+         return text
+ 
+     def _extract_custom_prefill(self, field: CustomField):
+-        rules = self.cfg.custom.custom_field_extraction_rules
+-        if not rules:
++        if not self.cfg.extraction.enabled:
+             return None
++        rules = self.cfg.custom.custom_field_extraction_rules
+         text = self._current_extraction_text()
+         if not text:
+             return None
+         info = self.current_info
++        field_role = self.cfg.extraction.field_roles.get(field.id, "")
+         return extract_custom_field_value(
+             field_id=field.id,
+-            field_name=field.name,
++            field_name=field.name if self.cfg.extraction.infer_roles_from_field_names else "",
+             field_type=field.normalized_type,
+             text=text,
+             rules=rules,
+@@ -724,6 +725,9 @@
+                 "filename": info.current_path.name if info else "",
+                 "path": str(info.current_path) if info else "",
+             },
++            field_role=field_role,
++            locale=self.cfg.extraction.locale,
++            use_builtin_rulesets=True,
+         )
+ 
+     def _refresh_custom_context(self) -> None:
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/rulesets/builtin/de/README.md repo_v077/paperless_nc_import/rulesets/builtin/de/README.md
+--- repo_v076/paperless_nc_import/rulesets/builtin/de/README.md	1970-01-01 00:00:00.000000000 +0000
++++ repo_v077/paperless_nc_import/rulesets/builtin/de/README.md	2026-06-14 07:43:43.651444422 +0000
+@@ -0,0 +1,14 @@
++# Built-in extraction rulesets, locale `de`
++
++Diese Dateien enthalten ausschließlich fachliche Label-Anker und Gewichte,
++keine Dokumente, keine OCR-Volltexte und keine erkannten Werte.
++
++Beispiel:
++
++```json
++{"text": "fahrzeugpreis inklusive nebenkosten", "weight": 0.96}
++```
++
++Der Wert hinter diesem Label wird lokal im Client gesucht und bleibt lokal.
++Für Community-Lernen darf später nur ein reduziertes Signal wie
++`amount.total <- "fahrzeugpreis inklusive nebenkosten"` übertragen werden.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/rulesets/builtin/de/amount_total.json repo_v077/paperless_nc_import/rulesets/builtin/de/amount_total.json
+--- repo_v076/paperless_nc_import/rulesets/builtin/de/amount_total.json	1970-01-01 00:00:00.000000000 +0000
++++ repo_v077/paperless_nc_import/rulesets/builtin/de/amount_total.json	2026-06-14 07:43:43.624919669 +0000
+@@ -0,0 +1,29 @@
++{
++  "schema": 1,
++  "locale": "de",
++  "role": "amount.total",
++  "field_type": "monetary",
++  "value_type": "money",
++  "version": "builtin-2026.06.14",
++  "description": "Deutsche Label-Ausdrücke, die typischerweise den Gesamt-/Brutto-/Zahlbetrag eines Belegs, einer Rechnung oder eines Kaufvertrags bezeichnen. Es werden nur Label-Anker gepflegt, niemals erkannte Werte.",
++  "labels": [
++    {"text": "endsumme", "weight": 0.98},
++    {"text": "e n d s u m m e", "weight": 0.98},
++    {"text": "endbetrag", "weight": 0.96},
++    {"text": "gesamtbetrag", "weight": 0.96},
++    {"text": "rechnungsbetrag", "weight": 0.96},
++    {"text": "rechnungssumme", "weight": 0.94},
++    {"text": "zu zahlen", "weight": 0.93},
++    {"text": "zahlbetrag", "weight": 0.92},
++    {"text": "betrag zahlbar", "weight": 0.90},
++    {"text": "betrag gezahlt", "weight": 0.88},
++    {"text": "gesamtpreis", "weight": 0.88},
++    {"text": "kaufpreis", "weight": 0.87},
++    {"text": "bruttobetrag", "weight": 0.86},
++    {"text": "brutto", "weight": 0.76},
++    {"text": "summe", "weight": 0.72},
++    {"text": "kartenzahlung", "weight": 0.72},
++    {"text": "fahrzeugpreis", "weight": 0.88},
++    {"text": "fahrzeugpreis inklusive nebenkosten", "weight": 0.96}
++  ]
++}
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/paperless_nc_import/rulesets/builtin/de/amount_vat.json repo_v077/paperless_nc_import/rulesets/builtin/de/amount_vat.json
+--- repo_v076/paperless_nc_import/rulesets/builtin/de/amount_vat.json	1970-01-01 00:00:00.000000000 +0000
++++ repo_v077/paperless_nc_import/rulesets/builtin/de/amount_vat.json	2026-06-14 07:43:43.637604087 +0000
+@@ -0,0 +1,16 @@
++{
++  "schema": 1,
++  "locale": "de",
++  "role": "amount.vat",
++  "field_type": "monetary",
++  "value_type": "money",
++  "version": "builtin-2026.06.14",
++  "description": "Deutsche Label-Ausdrücke für Umsatzsteuer-/Mehrwertsteuerbeträge. Es werden nur Label-Anker gepflegt, niemals erkannte Werte.",
++  "labels": [
++    {"text": "mwst", "weight": 0.90},
++    {"text": "mehrwertsteuer", "weight": 0.94},
++    {"text": "umsatzsteuer", "weight": 0.95},
++    {"text": "ust", "weight": 0.88},
++    {"text": "steuerbetrag", "weight": 0.82}
++  ]
++}
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/pyproject.toml repo_v077/pyproject.toml
+--- repo_v076/pyproject.toml	2026-06-14 03:07:28.000000000 +0000
++++ repo_v077/pyproject.toml	2026-06-14 07:45:04.829739884 +0000
+@@ -26,6 +26,9 @@
+ [tool.setuptools.packages.find]
+ include = ["paperless_nc_import*"]
+ 
++[tool.setuptools.package-data]
++paperless_nc_import = ["rulesets/**/*.json", "rulesets/**/*.md"]
++
+ [tool.ruff]
+ line-length = 100
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/tests/test_community_learning.py repo_v077/tests/test_community_learning.py
+--- repo_v076/tests/test_community_learning.py	1970-01-01 00:00:00.000000000 +0000
++++ repo_v077/tests/test_community_learning.py	2026-06-14 07:45:30.252941259 +0000
+@@ -0,0 +1,41 @@
++from paperless_nc_import.community_learning import build_community_signal, is_safe_label, unsafe_label_reason
++
++
++def test_safe_community_signal_contains_no_value():
++    signal = build_community_signal(
++        label="Fahrzeugpreis inklusive Nebenkosten",
++        field_role="amount.total",
++        field_type="monetary",
++        extractor="label_before_value",
++        result="accepted",
++        app_version="0.7.7",
++    )
++    assert signal is not None
++    payload = signal.to_payload()
++    assert payload == {
++        "schema": 1,
++        "locale": "de",
++        "field_role": "amount.total",
++        "field_type": "monetary",
++        "extractor": "label_before_value",
++        "label_normalized": "fahrzeugpreis inklusive nebenkosten",
++        "result": "accepted",
++        "app_version": "0.7.7",
++    }
++    assert "15900" not in repr(payload)
++
++
++def test_community_signal_rejects_digits_and_values():
++    assert not is_safe_label("Fahrzeugpreis 15900,00")
++    assert unsafe_label_reason("Fahrzeugpreis 15900,00") == "digit"
++    assert build_community_signal(
++        label="Fahrzeugpreis 15900,00",
++        field_role="amount.total",
++        field_type="monetary",
++        extractor="label_before_value",
++        result="accepted",
++    ) is None
++
++
++def test_community_signal_rejects_iban_like_label():
++    assert not is_safe_label("IBAN DE49 8005 3000 1131 0425 29")
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/tests/test_config_extraction.py repo_v077/tests/test_config_extraction.py
+--- repo_v076/tests/test_config_extraction.py	2026-06-14 03:42:01.000000000 +0000
++++ repo_v077/tests/test_config_extraction.py	2026-06-14 07:45:31.961375433 +0000
+@@ -25,3 +25,22 @@
+     assert rule.field_id == 3
+     assert rule.field_name == "Rechnungsbetrag"
+     assert rule.extractor == "receipt_total"
++
++
++def test_config_loads_field_roles_for_extraction(tmp_path):
++    cfg_path = tmp_path / "config.yaml"
++    cfg_path.write_text(
++        """
++extraction:
++  enabled: true
++  locale: de
++  field_roles:
++    "3": amount.total
++    "19": amount.vat
++""".strip(),
++        encoding="utf-8",
++    )
++    cfg = load_config(cfg_path)
++    assert cfg.extraction.enabled is True
++    assert cfg.extraction.locale == "de"
++    assert cfg.extraction.field_roles == {3: "amount.total", 19: "amount.vat"}
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' repo_v076/tests/test_extraction.py repo_v077/tests/test_extraction.py
+--- repo_v076/tests/test_extraction.py	2026-06-14 03:46:23.000000000 +0000
++++ repo_v077/tests/test_extraction.py	2026-06-14 07:45:30.239073873 +0000
+@@ -118,3 +118,31 @@
+     )
+     assert result is not None
+     assert result.value == "4711"
++
++
++def test_builtin_ruleset_extracts_vehicle_purchase_total_without_yaml_regex():
++    result = extract_custom_field_value(
++        field_id=3,
++        field_name="Rechnungsbetrag",
++        field_type="monetary",
++        text="Fahrzeugpreis inklusive Nebenkosten: 15900,00 Euro",
++        rules=[],
++        field_role="amount.total",
++    )
++    assert result is not None
++    assert result.value == "15900,00"
++    assert result.role == "amount.total"
++    assert result.label_normalized == "fahrzeugpreis inklusive nebenkosten"
++
++
++def test_builtin_ruleset_infers_amount_total_from_german_field_name():
++    result = extract_custom_field_value(
++        field_id=3,
++        field_name="Rechnungsbetrag",
++        field_type="monetary",
++        text="Endsumme € 14.64",
++        rules=[],
++    )
++    assert result is not None
++    assert result.value == "14,64"
++    assert result.role == "amount.total"

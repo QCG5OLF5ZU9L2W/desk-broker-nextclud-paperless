@@ -159,6 +159,38 @@ ocr:
   # true = bei OCR-Fehler Import abbrechen; false = Original trotzdem hochladen.
   fail_on_error: true
 
+extraction:
+  # Rollenbasierte Erkennung aus Projekt-Rulesets. Hier werden keine Regexe gepflegt.
+  # Die Zuordnung bleibt ID-basiert und damit stabil gegen spätere Feldumbenennungen.
+  enabled: true
+  locale: "de"
+  infer_roles_from_field_names: true
+  field_roles:
+    # Beispiel aus Paperless: Rechnungsbetrag [#3, monetary]
+    "3": "amount.total"
+    # Weitere Rollen für spätere Ausbaustufen:
+    # "19": "amount.vat"
+    # "6": "bank.iban"
+
+community_learning:
+  # Vorbereitet für DSGVO-konformes Schwarm-Lernen.
+  # Es dürfen nur reduzierte Label-Rollen-Signale gemeldet werden, nie Werte.
+  enabled: false
+  endpoint: ""
+  consent:
+    granted: false
+    version: 1
+    granted_at: null
+    method: null
+  mode:
+    submit: "ask_each_entry"  # ask_each_entry | queue_and_review | automatic_after_consent
+  privacy:
+    send_values: false
+    send_ocr_text: false
+    send_paths: false
+    send_document_ids: false
+    send_installation_id: false
+
 gui:
   enabled: true
   auto_for_explicit_files: true
@@ -186,20 +218,10 @@ custom:
   # custom_field_nextcloud_path_id: "14"
   # custom_field_local_path_id: ""
 
-  # GUI-Vorbelegung aus OCR/PDF-Text. Die ID ist die stabile Zuordnung;
-  # field_name ist lesbarer Hinweis und Fallback für geteilte Konfigurationen.
-  custom_field_extraction_rules:
-    - field_id: "3"
-      field_name: "Rechnungsbetrag"
-      field_type: "monetary"
-      source: "ocr_text"
-      extractor: "receipt_total"
-      normalize: "monetary"
-      priority: 10
-      # Alternativ/zusätzlich möglich:
-      # patterns:
-      #   - "Endsumm?e\\s*€?\\s*([0-9]+[,.][0-9]{2})"
-      # group: 1
+  # Entwickler-/Migrations-Override. Normale Nutzer sollen hier keine Regexe pflegen.
+  # Für die normale Rechnungserkennung bitte extraction.field_roles und die
+  # Projekt-Rulesets unter paperless_nc_import/rulesets/ verwenden.
+  custom_field_extraction_rules: []
 
   # Rückreferenzen / globale IDs, die nach erfolgreichem Import wieder in
   # Paperless-Custom-Fields geschrieben werden können.

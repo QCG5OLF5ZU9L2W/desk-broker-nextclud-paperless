@@ -118,3 +118,31 @@ def test_rule_source_can_use_title_instead_of_document_text():
     )
     assert result is not None
     assert result.value == "4711"
+
+
+def test_builtin_ruleset_extracts_vehicle_purchase_total_without_yaml_regex():
+    result = extract_custom_field_value(
+        field_id=3,
+        field_name="Rechnungsbetrag",
+        field_type="monetary",
+        text="Fahrzeugpreis inklusive Nebenkosten: 15900,00 Euro",
+        rules=[],
+        field_role="amount.total",
+    )
+    assert result is not None
+    assert result.value == "15900,00"
+    assert result.role == "amount.total"
+    assert result.label_normalized == "fahrzeugpreis inklusive nebenkosten"
+
+
+def test_builtin_ruleset_infers_amount_total_from_german_field_name():
+    result = extract_custom_field_value(
+        field_id=3,
+        field_name="Rechnungsbetrag",
+        field_type="monetary",
+        text="Endsumme € 14.64",
+        rules=[],
+    )
+    assert result is not None
+    assert result.value == "14,64"
+    assert result.role == "amount.total"

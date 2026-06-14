@@ -203,6 +203,16 @@ class OcrConfig:
 
 
 @dataclass(slots=True)
+class ExtractionConfig:
+    # Project rulesets contain only semantic labels and weights. Field roles map
+    # local Paperless custom field IDs to stable roles, e.g. 3 -> amount.total.
+    enabled: bool = True
+    locale: str = "de"
+    field_roles: dict[int, str] = field(default_factory=dict)
+    infer_roles_from_field_names: bool = True
+
+
+@dataclass(slots=True)
 class CustomConfig:
     # Optional stable default mappings. GUI can override them per import.
     field_nextcloud_web_url_id: int | None = None
@@ -239,6 +249,7 @@ class AppConfig:
     import_: ImportConfig = field(default_factory=ImportConfig)
     gui: GuiConfig = field(default_factory=GuiConfig)
     ocr: OcrConfig = field(default_factory=OcrConfig)
+    extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
     custom: CustomConfig = field(default_factory=CustomConfig)
     path: Path = field(default_factory=default_config_path)
 
@@ -360,6 +371,21 @@ def _as_int_list(value: Any) -> list[int]:
     return out
 
 
+def _as_field_roles(value: Any) -> dict[int, str]:
+    if not isinstance(value, dict):
+        return {}
+    out: dict[int, str] = {}
+    for key, role in value.items():
+        try:
+            field_id = int(key)
+        except (TypeError, ValueError):
+            continue
+        role_text = str(role or "").strip()
+        if role_text:
+            out[field_id] = role_text
+    return out
+
+
 def _as_deck_routes(value: Any) -> list[DeckRouteConfig]:
     if not isinstance(value, list):
         return []
@@ -411,6 +437,7 @@ def load_config(path: Path | None = None) -> AppConfig:
     imp = data.get("import", {}) or {}
     gui = data.get("gui", {}) or {}
     ocr = data.get("ocr", {}) or {}
+    extraction = data.get("extraction", {}) or {}
     custom = data.get("custom", {}) or {}
 
     cfg = AppConfig(path=config_path)
@@ -508,6 +535,12 @@ def load_config(path: Path | None = None) -> AppConfig:
         text_probe_pages=_as_int(ocr.get("text_probe_pages"), 3),
         timeout_seconds=_as_int(ocr.get("timeout_seconds"), 0),
         fail_on_error=_as_bool(ocr.get("fail_on_error"), True),
+    )
+    cfg.extraction = ExtractionConfig(
+        enabled=_as_bool(extraction.get("enabled"), True),
+        locale=str(extraction.get("locale", "de") or "de"),
+        field_roles=_as_field_roles(extraction.get("field_roles")),
+        infer_roles_from_field_names=_as_bool(extraction.get("infer_roles_from_field_names"), True),
     )
     cfg.custom = CustomConfig(
         field_nextcloud_web_url_id=_optional_int(

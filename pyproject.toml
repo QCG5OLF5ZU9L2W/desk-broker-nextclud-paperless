@@ -26,6 +26,9 @@ paperless-nc-import = "paperless_nc_import.cli:main"
 [tool.setuptools.packages.find]
 include = ["paperless_nc_import*"]
 
+[tool.setuptools.package-data]
+paperless_nc_import = ["rulesets/**/*.json", "rulesets/**/*.md"]
+
 [tool.ruff]
 line-length = 100
 

@@ -704,16 +704,17 @@ class MainWindow(QMainWindow):
         return text
 
     def _extract_custom_prefill(self, field: CustomField):
-        rules = self.cfg.custom.custom_field_extraction_rules
-        if not rules:
+        if not self.cfg.extraction.enabled:
             return None
+        rules = self.cfg.custom.custom_field_extraction_rules
         text = self._current_extraction_text()
         if not text:
             return None
         info = self.current_info
+        field_role = self.cfg.extraction.field_roles.get(field.id, "")
         return extract_custom_field_value(
             field_id=field.id,
-            field_name=field.name,
+            field_name=field.name if self.cfg.extraction.infer_roles_from_field_names else "",
             field_type=field.normalized_type,
             text=text,
             rules=rules,
@@ -724,6 +725,9 @@ class MainWindow(QMainWindow):
                 "filename": info.current_path.name if info else "",
                 "path": str(info.current_path) if info else "",
             },
+            field_role=field_role,
+            locale=self.cfg.extraction.locale,
+            use_builtin_rulesets=True,
         )
 
     def _refresh_custom_context(self) -> None:

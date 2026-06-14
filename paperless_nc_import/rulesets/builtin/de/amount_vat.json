@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "locale": "de",
+  "role": "amount.vat",
+  "field_type": "monetary",
+  "value_type": "money",
+  "version": "builtin-2026.06.14",
+  "description": "Deutsche Label-Ausdrücke für Umsatzsteuer-/Mehrwertsteuerbeträge. Es werden nur Label-Anker gepflegt, niemals erkannte Werte.",
+  "labels": [
+    {"text": "mwst", "weight": 0.90},
+    {"text": "mehrwertsteuer", "weight": 0.94},
+    {"text": "umsatzsteuer", "weight": 0.95},
+    {"text": "ust", "weight": 0.88},
+    {"text": "steuerbetrag", "weight": 0.82}
+  ]
+}

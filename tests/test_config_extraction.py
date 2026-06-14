@@ -25,3 +25,22 @@ custom:
     assert rule.field_id == 3
     assert rule.field_name == "Rechnungsbetrag"
     assert rule.extractor == "receipt_total"
+
+
+def test_config_loads_field_roles_for_extraction(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        """
+extraction:
+  enabled: true
+  locale: de
+  field_roles:
+    "3": amount.total
+    "19": amount.vat
+""".strip(),
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.extraction.enabled is True
+    assert cfg.extraction.locale == "de"
+    assert cfg.extraction.field_roles == {3: "amount.total", 19: "amount.vat"}
