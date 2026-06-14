@@ -172,3 +172,25 @@ Standardmäßig wird nicht automatisch gepusht. Für Push:
 ```bash
 PUSH=1 scripts/apply-extractor-adapter-patch.sh /pfad/zum/patch.patch
 ```
+
+## Optional: PaddleOCR sidecar
+
+For difficult scans, install the optional PaddleOCR sidecar:
+
+```bash
+scripts/install-paddleocr-sidecar.sh
+```
+
+Then enable it in `~/.config/paperless-nc-import/config.yaml`.
+
+## Optional: PaddleOCR layout extraction
+
+For difficult scans, install the PaddleOCR sidecar and pre-cache the document before opening it in the GUI:
+
+```bash
+scripts/install-paddleocr-sidecar.sh
+scripts/precache-paddleocr.sh /path/to/document.pdf
+paperless-nc-import --gui /path/to/document.pdf
+```
+
+The sidecar is local-only. It produces OCR tokens and layout boxes for the extractor chain.

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from .base import ExtractorInput, ExtractorResult
 from .generic_text import GenericTextExtractor
+from .paddleocr_sidecar import PaddleOCRSidecarExtractor
 from .invoice2data_adapter import Invoice2DataExtractor
+from .paddleocr_layout_amount import PaddleOCRLayoutAmountExtractor
 from .structured_invoice import StructuredInvoiceExtractor
 
 
@@ -10,7 +12,9 @@ def extractor_chain() -> list:
     chain = [
         StructuredInvoiceExtractor(),
         Invoice2DataExtractor(),
+        PaddleOCRLayoutAmountExtractor(),
         GenericTextExtractor(),
+        PaddleOCRSidecarExtractor(),
     ]
     return sorted(chain, key=lambda ex: int(getattr(ex, "priority", 100)))
 
