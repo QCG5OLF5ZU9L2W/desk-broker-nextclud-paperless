@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# Vorlage. Für echte Installation bitte aus dem Projektordner verwenden:
+#   make install-nautilus
+# oder:
+#   ./integrations/nautilus/install-nautilus.sh
+#
+# Der Installer erzeugt dann einen Starter mit absolutem Pfad zur Projekt-.venv.
+exec "${HOME}/.local/bin/paperless-nc-import" --gui "$@"

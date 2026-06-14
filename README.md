@@ -1,5 +1,3 @@
-# desk-broker-nextcloud-paperless
-integration the local linux into a broker of docs between your own nextcloud und paperless ngx.
 # paperless-nc-import v0.7.6
 
 Python/PySide6 Import-GUI für lokale Nextcloud-Dateien nach Paperless-ngx mit OCR, Paperless-Metadaten, Nextcloud-Rückverweis und optionaler Nextcloud-Deck-Wiedervorlage.

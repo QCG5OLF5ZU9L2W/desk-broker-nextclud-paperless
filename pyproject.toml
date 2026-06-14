@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperless-nc-import"
+version = "0.7.6"
+description = "Desktop importer for Paperless-ngx with Nextcloud reverse links"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+  {name = "Fuenfstuecks / local workflow prototype"}
+]
+dependencies = [
+  "PySide6>=6.6",
+  "PyYAML>=6.0",
+  "requests>=2.31",
+  "Send2Trash>=1.8",
+  "holidays>=0.58",
+]
+
+[project.scripts]
+paperless-nc-import = "paperless_nc_import.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["paperless_nc_import*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true

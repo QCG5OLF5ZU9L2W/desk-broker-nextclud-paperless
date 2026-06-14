@@ -1,0 +1,222 @@
+paperless:
+  url: "https://ngx.example.tld"
+  token: "CHANGE_ME"
+  tag_prefix: ""
+  auto_create_tags: true
+  auto_create_correspondents: false
+  auto_create_document_types: false
+  auto_create_storage_paths: false
+  document_url_template: "{base}/documents/{id}"
+  http_timeout_seconds: 60
+  page_size: 500
+  metadata_cache_hours: 1
+  custom_value_suggestion_limit: 250
+
+nextcloud:
+  auto_detect: true
+  # Linux:   ~/.config/Nextcloud/nextcloud.cfg
+  # Windows: %APPDATA%\Nextcloud\nextcloud.cfg
+  # macOS:   ~/Library/Preferences/Nextcloud/nextcloud.cfg
+  config_path: "~/.config/Nextcloud/nextcloud.cfg"
+  write_sidecar: true
+  write_json: true
+  write_markdown: true
+  link_dir_name: "paperless-links"
+
+  # optional, später für WebDAV-Kommentar gegenprüfen
+  write_comment: false
+  server_url: ""
+  user: ""
+  app_password: ""
+
+deck:
+  enabled: false
+
+  # App-Passwörter gehören nicht in config.yaml. Die Datei wird vom Python-Code
+  # gelesen; dadurch funktioniert es auch aus Nautilus ohne Shell-export.
+  secrets_file: "~/.config/paperless-nc-import/secrets.env"
+
+  # Keine harte Nextcloud-Instanz: Die Instanz wird pro Datei aus dem lokalen
+  # Nextcloud-Sync-Pfad ermittelt.  Die Routes liefern nur die Zugangsdaten und
+  # Board-/Stack-IDs für den jeweils erkannten Mount.
+  followup_field_ids: []
+  followup_field_names: ["Wiedervorlage"]
+
+  create_only_after_paperless_success: true
+  require_document_id: true
+  require_deck_success_for_trash: true
+
+  todo_label: "Todo"
+  todo_label_color: "31CC7C"
+  auto_create_label: true
+
+  title_template: "Wiedervorlage: {document_title}"
+  description_template: |
+    {paperless_url}
+
+    Start: {deck_start_date}
+    Aufwand/Vorlauf: {deck_effort}
+
+    --- Erste Seite ---
+    {first_page_text}
+  max_first_page_chars: 4000
+  due_time: "09:00"
+  timezone: "Europe/Berlin"
+
+  # Vorlauf/Aufwand für den Arbeitsbeginn der Deck-Karte.
+  # Leer = kein Startdatum.
+  # Beispiele:
+  #   5d  = 5 Arbeitstage vor Fälligkeit
+  #   3h  = 3 Stunden vor Fälligkeit
+  #   30m = 30 Minuten vor Fälligkeit
+  #   10kt = 10 Kalendertage vor Fälligkeit
+  #   2w  = 2 Arbeitswochen = 10 Arbeitstage vor Fälligkeit
+  default_effort: ""
+  effort_holiday_state: "BE"
+  http_timeout_seconds: 30
+
+  routes:
+    # Beispiel 1: Auswahl über lokalen Sync-Pfad. Server/User kommen trotzdem
+    # aus nextcloud.cfg und werden nicht global hart vorgegeben.
+    - name: "nc.5st.eu Hauptsync"
+      match_local_root: "/home/frank/Documents/nc.5st.eu"
+      # optional enger: match_user: "DoginekuhBunt"
+      username: "DoginekuhBunt"
+      app_password_env: "NC_DECK_APP_PASSWORD_NC5ST"
+      # Optionaler Default. Die GUI lädt die realen Boards/Stacks aus Deck
+      # und die Auswahl im Dialog überschreibt diese Werte pro Import.
+      default_board_id: null
+      default_stack_id: null
+
+    # Beispiel 2: zweite Nextcloud-Instanz. Nur aktiv verwenden, wenn passend.
+    - name: "nextcloud.5st.eu"
+      match_local_root: "/home/frank/Documents/nextcloud.5st.eu"
+      username: "frank"
+      app_password_env: "NC_DECK_APP_PASSWORD_NEXTCLOUD5ST"
+      default_board_id: null
+      default_stack_id: null
+
+import:
+  # Fallback-Eingang, wenn keine Datei an CLI/Nautilus übergeben wird.
+  inbox_dir: "~/Documents/nc.5st.eu/paperless_ausgang"
+  pattern: "img*.pdf"
+  min_age_seconds: 60
+  rename_with_birthdate: true
+  date_format: "%Y-%m-%d_%H-%M-%S"
+  set_created_from_birthdate: true
+  set_title_from_filename: true
+  default_tag: "Posteingang"
+  # Herkunft/Nextcloud/Elternordner sollen nicht still als Klassifikations-Tag gesetzt werden.
+  default_tag_from_parent_folder: false
+  # Lokaler Hash-State ist nur Verlauf/Warnung. Paperless bleibt die Quelle der Wahrheit.
+  # false = keine lokale Warnung; true = lokale Warnung, aber kein Blockieren.
+  prevent_duplicates: false
+  state_file: "~/.local/state/paperless-nc-import/uploaded.jsonl"
+  wait_for_task: true
+  trash_after_success: true
+  task_wait_timeout_seconds: 240
+  task_wait_interval_seconds: 1
+
+ocr:
+  enabled: true
+  # auto  = OCR nur starten, wenn keine/zu wenig Textschicht erkannt wird
+  # never = nie OCR ausführen
+  # redo  = vorhandene OCR-Textschicht ersetzen
+  # force = PDF vollständig neu rendern/OCR erzwingen; nur für Problemfälle
+  mode: "auto"
+
+  # v0.6: Archiv-OCR über OCRmyPDF/Tesseract.
+  # PaddleOCR/Surya/docTR bleiben als Assistenz-OCR für spätere Versionen vorgesehen.
+  archive_engine: "ocrmypdf"
+  assist_engine: "none"
+
+  # Tesseract-Sprachen. Für deutsche Behörden/Rechnungen plus englische Fragmente.
+  languages: ["deu", "eng"]
+
+  # Cache verhindert wiederholte OCR desselben Dokuments.
+  cache_dir: "~/.cache/paperless-nc-import/ocr"
+
+  # ocr_pdf = wenn OCR erzeugt wurde, dieses PDF nach Paperless hochladen
+  # original = OCR nur für Vorschau/Text/Feldvorschläge verwenden, Original hochladen
+  upload: "ocr_pdf"
+
+  # 0 = OCRmyPDF automatisch/mehr Kerne nutzen lassen; bei Lastproblemen z.B. 2 setzen.
+  jobs: 0
+  output_type: "pdfa"
+  rotate_pages: true
+  deskew: true
+  clean: true
+  sidecar_text: true
+
+  # Wenn in den ersten text_probe_pages weniger als min_text_chars Zeichen gefunden werden,
+  # gilt die PDF als Scan ohne brauchbare Textschicht.
+  min_text_chars: 40
+  text_probe_pages: 3
+
+  # 0 = kein explizites Timeout. Für Server/Batchbetrieb kann hier z.B. 900 gesetzt werden.
+  timeout_seconds: 0
+
+  # true = bei OCR-Fehler Import abbrechen; false = Original trotzdem hochladen.
+  fail_on_error: true
+
+gui:
+  enabled: true
+  auto_for_explicit_files: true
+  preload_paperless_metadata: true
+  confirm_before_upload: true
+  viewer_mode: "internal"  # internal | external | off
+  split_ratio: [50, 50]
+  # Nach erfolgreichem Import und erledigtem Ablage-/Papierkorb-Schritt automatisch schließen.
+  close_after_success: true
+  close_after_seconds: 2
+
+custom:
+  # Optional: stabile Default-Mappings. Die GUI kann pro Import übersteuern.
+  field_nextcloud_web_url_id: null
+  field_nextcloud_cloud_path_id: null
+  field_nextcloud_webdav_url_id: null
+  field_nextcloud_fileid_id: null
+  field_nextcloud_etag_id: null
+  field_local_path_id: null
+  field_sha256_id: null
+  field_original_path_id: null
+  field_birthtime_id: null
+
+  # Kompatible Alias-Namen werden ebenfalls gelesen, z.B.:
+  # custom_field_nextcloud_path_id: "14"
+  # custom_field_local_path_id: ""
+
+  # GUI-Vorbelegung aus OCR/PDF-Text. Die ID ist die stabile Zuordnung;
+  # field_name ist lesbarer Hinweis und Fallback für geteilte Konfigurationen.
+  custom_field_extraction_rules:
+    - field_id: "3"
+      field_name: "Rechnungsbetrag"
+      field_type: "monetary"
+      source: "ocr_text"
+      extractor: "receipt_total"
+      normalize: "monetary"
+      priority: 10
+      # Alternativ/zusätzlich möglich:
+      # patterns:
+      #   - "Endsumm?e\\s*€?\\s*([0-9]+[,.][0-9]{2})"
+      # group: 1
+
+  # Rückreferenzen / globale IDs, die nach erfolgreichem Import wieder in
+  # Paperless-Custom-Fields geschrieben werden können.
+  # Damit referenzieren sich Paperless und Deck gegenseitig.
+  field_deck_card_url_id: null
+  field_deck_card_id_id: null
+  field_global_document_id_id: null
+  field_process_id_id: null
+
+  # Globale Dokument-ID: stabil aus Paperless-Instanz + Dokument-ID.
+  # Beispiel: urn:paperless:ngx.5st.eu:document:1900
+  global_document_id_template: "urn:paperless:{paperless_host}:document:{paperless_document_id}"
+
+  # Vorgangs-ID: Default = gleich globale Dokument-ID.
+  # Später kann das auf eine echte Akten-/Vorgangslogik umgestellt werden.
+  process_id_template: "{global_document_id}"
+
+  # Wenn true, wird die Quelldatei nur gelöscht/verschoben, wenn konfigurierte
+  # Rücklink-Custom-Fields erfolgreich in Paperless aktualisiert wurden.
+  require_backlink_update_for_trash: false
