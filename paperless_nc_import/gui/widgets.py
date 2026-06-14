@@ -415,10 +415,10 @@ class CustomFieldEditor(QWidget):
         self.form_layout.addRow(buttons)
         self._show_by_type(None)
 
-        self.extraction_debug_label = Gtk.Label(label="")
-        self.extraction_debug_label.set_xalign(0)
-        self.extraction_debug_label.set_selectable(True)
-        self.extraction_debug_label.set_line_wrap(True)
+        self.extraction_debug_label = QLabel("")
+        self.extraction_debug_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        self.extraction_debug_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.extraction_debug_label.setWordWrap(True)
         try:
             self.grid.attach(self.extraction_debug_label, 1, 3, 2, 1)
         except Exception:
@@ -435,7 +435,7 @@ class CustomFieldEditor(QWidget):
 
     def set_extraction_debug(self, text: str) -> None:
         if hasattr(self, "extraction_debug_label"):
-            self.extraction_debug_label.set_text(text or "")
+            self.extraction_debug_label.setText(text or "")
 
     def set_field(
         self,
