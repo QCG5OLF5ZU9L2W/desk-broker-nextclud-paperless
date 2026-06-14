@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperless-nc-import"
-version = "0.7.6"
+version = "0.7.8"
 description = "Desktop importer for Paperless-ngx with Nextcloud reverse links"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -18,6 +18,26 @@ dependencies = [
   "requests>=2.31",
   "Send2Trash>=1.8",
   "holidays>=0.58",
+  "dateparser>=1.2",
+  "python-stdnum>=1.20",
+]
+
+[project.optional-dependencies]
+invoice = [
+  "invoice2data>=0.4",
+  "factur-x>=3.8",
+]
+analytics = [
+  "duckdb>=1.0",
+]
+layout = [
+  "docling>=2.0",
+]
+all-extractors = [
+  "invoice2data>=0.4",
+  "factur-x>=3.8",
+  "duckdb>=1.0",
+  "docling>=2.0",
 ]
 
 [project.scripts]
@@ -27,7 +47,7 @@ paperless-nc-import = "paperless_nc_import.cli:main"
 include = ["paperless_nc_import*"]
 
 [tool.setuptools.package-data]
-paperless_nc_import = ["rulesets/**/*.json", "rulesets/**/*.md"]
+paperless_nc_import = ["rulesets/**/*.json", "rulesets/**/*.yaml", "rulesets/**/*.yml", "rulesets/**/*.md"]
 
 [tool.ruff]
 line-length = 100

@@ -143,6 +143,24 @@ _FIELD_ROLE_ALIASES_DE: dict[str, set[str]] = {
         "umsatzsteuer",
         "ust",
     },
+    "date.invoice": {
+        "belegdatum",
+        "datum",
+        "rechnungsdatum",
+        "ausstellungsdatum",
+    },
+    "date.due": {
+        "faellig",
+        "fällig",
+        "faelligkeitsdatum",
+        "fälligkeitsdatum",
+        "zahlbar bis",
+        "zahlungsziel",
+    },
+    "bank.iban": {
+        "iban",
+        "bankverbindung",
+    },
 }
 
 
@@ -156,9 +174,13 @@ def infer_field_role(*, field_name: str, field_type: str, locale: str = "de") ->
         return ""
     typ = (field_type or "").strip().casefold()
     name = normalize_label(field_name)
-    if typ and typ != "monetary":
-        return ""
     for role, aliases in _FIELD_ROLE_ALIASES_DE.items():
+        if role.startswith("amount.") and typ and typ != "monetary":
+            continue
+        if role.startswith("date.") and typ and typ != "date":
+            continue
+        if role == "bank.iban" and typ and typ not in {"string", "url", "text"}:
+            continue
         for alias in aliases:
             a = normalize_label(alias)
             if name == a or a in name:

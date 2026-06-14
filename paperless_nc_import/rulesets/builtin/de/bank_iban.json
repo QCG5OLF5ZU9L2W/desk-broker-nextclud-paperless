@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "locale": "de",
+  "role": "bank.iban",
+  "field_type": "string",
+  "value_type": "iban",
+  "version": "builtin-2026.06.14",
+  "description": "Deutsche Label-Anker für IBAN-Erkennung. IBAN-Werte werden nie in Rulesets oder Community-Signalen gespeichert.",
+  "label_groups": {
+    "bank_label": [
+      {"text": "iban", "weight": 0.95},
+      {"text": "bankverbindung", "weight": 0.86},
+      {"text": "konto", "weight": 0.65}
+    ]
+  }
+}

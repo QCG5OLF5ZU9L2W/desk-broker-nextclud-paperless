@@ -213,6 +213,50 @@ class ExtractionConfig:
 
 
 @dataclass(slots=True)
+class CommunityLearningConsentConfig:
+    granted: bool = False
+    version: int = 1
+    granted_at: str = ""
+    method: str = ""
+
+
+@dataclass(slots=True)
+class CommunityLearningModeConfig:
+    # ask_each_entry | queue_and_review | automatic_after_consent
+    submit: str = "ask_each_entry"
+    download_rulesets: bool = True
+
+
+@dataclass(slots=True)
+class CommunityLearningPrivacyConfig:
+    send_values: bool = False
+    send_ocr_text: bool = False
+    send_paths: bool = False
+    send_document_ids: bool = False
+    send_installation_id: bool = False
+
+
+@dataclass(slots=True)
+class CommunityLearningConfig:
+    enabled: bool = False
+    endpoint: str = ""
+    consent: CommunityLearningConsentConfig = field(default_factory=CommunityLearningConsentConfig)
+    mode: CommunityLearningModeConfig = field(default_factory=CommunityLearningModeConfig)
+    privacy: CommunityLearningPrivacyConfig = field(default_factory=CommunityLearningPrivacyConfig)
+
+
+@dataclass(slots=True)
+class DuckDBAnalyticsConfig:
+    enabled: bool = False
+    path: Path = field(default_factory=lambda: xdg_state_home() / APP_NAME / "analytics.duckdb")
+
+
+@dataclass(slots=True)
+class AnalyticsConfig:
+    duckdb: DuckDBAnalyticsConfig = field(default_factory=DuckDBAnalyticsConfig)
+
+
+@dataclass(slots=True)
 class CustomConfig:
     # Optional stable default mappings. GUI can override them per import.
     field_nextcloud_web_url_id: int | None = None
@@ -250,6 +294,8 @@ class AppConfig:
     gui: GuiConfig = field(default_factory=GuiConfig)
     ocr: OcrConfig = field(default_factory=OcrConfig)
     extraction: ExtractionConfig = field(default_factory=ExtractionConfig)
+    community_learning: CommunityLearningConfig = field(default_factory=CommunityLearningConfig)
+    analytics: AnalyticsConfig = field(default_factory=AnalyticsConfig)
     custom: CustomConfig = field(default_factory=CustomConfig)
     path: Path = field(default_factory=default_config_path)
 
@@ -438,6 +484,8 @@ def load_config(path: Path | None = None) -> AppConfig:
     gui = data.get("gui", {}) or {}
     ocr = data.get("ocr", {}) or {}
     extraction = data.get("extraction", {}) or {}
+    community_learning = data.get("community_learning", {}) or {}
+    analytics = data.get("analytics", {}) or {}
     custom = data.get("custom", {}) or {}
 
     cfg = AppConfig(path=config_path)
@@ -541,6 +589,37 @@ def load_config(path: Path | None = None) -> AppConfig:
         locale=str(extraction.get("locale", "de") or "de"),
         field_roles=_as_field_roles(extraction.get("field_roles")),
         infer_roles_from_field_names=_as_bool(extraction.get("infer_roles_from_field_names"), True),
+    )
+    consent = community_learning.get("consent", {}) or {}
+    mode = community_learning.get("mode", {}) or {}
+    privacy = community_learning.get("privacy", {}) or {}
+    cfg.community_learning = CommunityLearningConfig(
+        enabled=_as_bool(community_learning.get("enabled"), False),
+        endpoint=str(community_learning.get("endpoint", "") or "").rstrip("/"),
+        consent=CommunityLearningConsentConfig(
+            granted=_as_bool(consent.get("granted"), False),
+            version=_as_int(consent.get("version"), 1),
+            granted_at=str(consent.get("granted_at") or ""),
+            method=str(consent.get("method") or ""),
+        ),
+        mode=CommunityLearningModeConfig(
+            submit=str(mode.get("submit", "ask_each_entry") or "ask_each_entry"),
+            download_rulesets=_as_bool(mode.get("download_rulesets"), True),
+        ),
+        privacy=CommunityLearningPrivacyConfig(
+            send_values=_as_bool(privacy.get("send_values"), False),
+            send_ocr_text=_as_bool(privacy.get("send_ocr_text"), False),
+            send_paths=_as_bool(privacy.get("send_paths"), False),
+            send_document_ids=_as_bool(privacy.get("send_document_ids"), False),
+            send_installation_id=_as_bool(privacy.get("send_installation_id"), False),
+        ),
+    )
+    duckdb = (analytics.get("duckdb", {}) or {}) if isinstance(analytics, dict) else {}
+    cfg.analytics = AnalyticsConfig(
+        duckdb=DuckDBAnalyticsConfig(
+            enabled=_as_bool(duckdb.get("enabled"), False),
+            path=expand_path(duckdb.get("path") or (xdg_state_home() / APP_NAME / "analytics.duckdb")),
+        )
     )
     cfg.custom = CustomConfig(
         field_nextcloud_web_url_id=_optional_int(

@@ -1,64 +1,195 @@
-# paperless-nc-import v0.7.6
+# Desk Broker – Nextcloud ↔ Paperless-ngx
 
-Python/PySide6 Import-GUI für lokale Nextcloud-Dateien nach Paperless-ngx mit OCR, Paperless-Metadaten, Nextcloud-Rückverweis und optionaler Nextcloud-Deck-Wiedervorlage.
+Desk Broker ist ein lokaler Dokumenten-Broker für Arbeitsdateien aus Nextcloud und lokalen Ordnern. Er führt Dokumente kontrolliert nach Paperless-ngx, zeigt sie vor dem Import in einer GUI an, unterstützt OCR/Review, befüllt Paperless-Custom-Fields und bereitet Workflow-Integrationen wie Nextcloud Deck und lokale Auswertung mit DuckDB/Metabase vor.
 
-## Neu in v0.7.6
+Paperless bleibt die Quelle der Wahrheit für Archiv, OCR-Index, Dokument-ID, Suche und Metadaten. Desk Broker ist die Arbeits- und Vermittlungsschicht davor.
 
-- OCR-Fortschrittsanzeige in der GUI: Status, Fortschrittsbalken und laufende OCRmyPDF-Ausgabe.
-- Automatische OCR während des Imports meldet den Fortschritt ebenfalls in die GUI.
-- OCR-CPU-Nutzung besser steuerbar: `ocr.jobs: 0` lässt OCRmyPDF automatisch/mehr Kerne nutzen; feste Werte begrenzen die Last.
-- Optionales automatisches Schließen nach vollständig abgeschlossenem Import: `gui.close_after_success`, `gui.close_after_seconds`.
+## Zielbild
 
-## Neu in v0.7.5
-
-- Paperless-Rücklinkfelder: Nach erfolgreichem Import können Deck-Karten-URL, Deck-Karten-ID, globale Dokument-ID und Vorgangs-ID in Paperless-Custom-Fields geschrieben werden.
-- Globale Dokument-ID: standardmäßig `urn:paperless:{paperless_host}:document:{paperless_document_id}`.
-- Vorgangs-ID: standardmäßig gleich globale Dokument-ID; per Template anpassbar.
-- Deck-Beschreibung enthält automatisch einen stabilen Markerblock mit Paperless-Dokument-ID, globaler Dokument-ID und Vorgangs-ID.
-- Deck-Sektion in der GUI erscheint nur noch, wenn ein gültiges Wiedervorlage-Custom-Field gesetzt wurde.
-- Sidecar JSON/Markdown enthält globale Dokument-ID, Vorgangs-ID und den Status der Paperless-Rücklinkaktualisierung.
-
-## Relevante Config-Erweiterung
-
-```yaml
-custom:
-  field_deck_card_url_id: null
-  field_deck_card_id_id: null
-  field_global_document_id_id: null
-  field_process_id_id: null
-
-  global_document_id_template: "urn:paperless:{paperless_host}:document:{paperless_document_id}"
-  process_id_template: "{global_document_id}"
-
-  require_backlink_update_for_trash: false
+```text
+Nextcloud / lokaler Ordner
+        ↓
+Desk Broker GUI
+        ↓
+OCR/Text/strukturierte Extraktion
+        ↓
+Review + Paperless-Custom-Fields
+        ↓
+Paperless-ngx
+        ↓
+optional: Deck / E-Akte / DuckDB / Metabase
 ```
 
-Die Feld-IDs müssen die IDs deiner Paperless-Custom-Fields sein. Wenn ein Feld `null` bleibt, wird es nicht geschrieben.
+## Funktionen
+
+- Import lokaler oder Nextcloud-synchronisierter Dateien nach Paperless-ngx
+- PySide6-GUI mit PDF-/Textvorschau und Paperless-Metadaten
+- OCR über OCRmyPDF/Tesseract mit Sidecar-Text und Fortschrittsanzeige
+- Paperless-Custom-Fields mit ID-basiertem Mapping
+- Rollenbasierte Vorbelegung von Feldern wie Rechnungsbetrag, Belegdatum, Fälligkeit und IBAN
+- Optionale Extraktionsadapter für strukturierte Rechnungen und `invoice2data`
+- Nextcloud-Rückverweise und Sidecar-Dateien
+- Vorbereitung für Nextcloud Deck als Wiedervorlage-/E-Akten-Cockpit
+- Optionaler DuckDB-Sink für lokale Auswertung mit Metabase
+- DSGVO-sparsames Community-Learning-Konzept für Label-Anker, nicht für Werte
+
+## Extraktionsarchitektur
+
+Desk Broker pflegt keine benutzerspezifischen Regex-Regeln für Rechnungen in der Nutzer-Config. Die Nutzer-Config ordnet nur lokale Paperless-Custom-Field-IDs stabilen fachlichen Rollen zu:
+
+```yaml
+extraction:
+  enabled: true
+  locale: "de"
+  infer_roles_from_field_names: true
+  field_roles:
+    "3": "amount.total"
+    "20": "date.invoice"
+    "21": "date.due"
+    "6": "bank.iban"
+```
+
+Die eigentliche Erkennung läuft über Adapter:
+
+1. **StructuredInvoiceExtractor** – ZUGFeRD/Factur-X/XRechnung, wenn strukturierte Daten vorhanden sind.
+2. **Invoice2DataExtractor** – templatebasierte PDF-Rechnungserkennung mit `invoice2data`, wenn installiert und passend.
+3. **GenericTextExtractor** – generischer Fallback für Text/OCR mit Rulesets, Datumsparsern, IBAN-Prüfung und konservativem Scoring.
+
+Bei niedriger Confidence wird lieber nichts vorbelegt als ein falscher Wert.
+
+## Rulesets
+
+Projekt-Rulesets liegen unter:
+
+```text
+paperless_nc_import/rulesets/builtin/de/
+```
+
+Sie enthalten nur fachliche Label-Anker und Gewichte, zum Beispiel:
+
+```json
+{
+  "role": "amount.total",
+  "labels": [
+    {"text": "rechnungsbetrag", "weight": 0.96, "kind": "strong_total"},
+    {"text": "zu zahlen", "weight": 0.95, "kind": "strong_total"},
+    {"text": "kartenzahlung", "weight": 0.72, "kind": "payment_confirmation"}
+  ]
+}
+```
+
+Rulesets dürfen keine Beträge, keine OCR-Ausschnitte, keine Dateinamen, keine Pfade, keine IDs und keine personenbezogenen Daten enthalten. Der Validator prüft diese Datenschutzgrenzen:
+
+```bash
+python scripts/validate_rulesets.py paperless_nc_import/rulesets/builtin
+```
+
+## DSGVO-konformes Community-Learning
+
+Community-Learning ist vorbereitet, aber standardmäßig deaktiviert.
+
+Zulässig ist nur ein reduziertes Lernsignal wie:
+
+```json
+{
+  "locale": "de",
+  "field_role": "amount.total",
+  "field_type": "monetary",
+  "label_normalized": "rechnungsbetrag",
+  "result": "accepted"
+}
+```
+
+Nicht übertragen werden dürfen:
+
+- Beträge
+- Datenwerte
+- Dokumente
+- OCR-Volltexte
+- Dateinamen
+- lokale oder Nextcloud-Pfade
+- Paperless-/Nextcloud-/Deck-IDs
+- IBAN-Werte
+- Namen, Adressen, Aktenzeichen oder sonstige personenbezogene Inhalte
+
+Ein Upload von Lernsignalen darf nur nach ausdrücklicher Einwilligung erfolgen.
+
+## DuckDB / Metabase
+
+Der optionale DuckDB-Sink ist für lokale Auswertung gedacht. Er speichert keine OCR-Volltexte und keine lokalen Pfade, sondern nur strukturierte Review-/Extraktionswerte.
+
+```yaml
+analytics:
+  duckdb:
+    enabled: false
+    path: "~/.local/share/paperless-nc-import/analytics.duckdb"
+```
+
+Installation der optionalen DuckDB-Unterstützung:
+
+```bash
+pip install -e '.[analytics]'
+```
+
+Metabase kann anschließend über einen DuckDB-Connector auf die lokale Datenbank zugreifen.
 
 ## Installation
 
+Siehe [INSTALL.md](INSTALL.md).
+
+Kurzfassung für Debian/Ubuntu:
+
 ```bash
+git clone git@github.com:QCG5OLF5ZU9L2W/desk-broker-nextclud-paperless.git
+cd desk-broker-nextclud-paperless
 python3 -m venv .venv
 . .venv/bin/activate
 pip install -U pip
 pip install -e .
+python -m compileall paperless_nc_import
+PYTHONPATH=. pytest -q
 ```
 
-Nautilus:
+Nautilus-Integration:
 
 ```bash
 make install-nautilus
 nautilus -q
 ```
 
-## Test
+## Git-Arbeitsweise
+
+Für Änderungen immer einen Branch verwenden:
 
 ```bash
-paperless-nc-import --doctor --startup-log --no-cache
-paperless-nc-import --startup-log --dry-run --gui /pfad/zur/datei.pdf
+git checkout -b feature/name-der-aenderung
+python -m compileall paperless_nc_import
+PYTHONPATH=. pytest -q
+git add .
+git commit -m "Kurze fachliche Beschreibung"
+git push -u origin feature/name-der-aenderung
 ```
 
+Patches werden mit dem Skript `scripts/apply-extractor-adapter-patch.sh` eingespielt. Das Skript legt bei einem unsauberen Arbeitsbaum vorher ein Backup-Diff an und arbeitet auf einem eigenen Branch.
 
-## v0.7.5: Paperless-Duplikate
+## Tests
 
-Wenn Paperless einen Import als Duplikat erkennt und `related_document` liefert, wird das vorhandene Paperless-Dokument als Quelle der Wahrheit verwendet. Die GUI zeigt die Attribute des vorhandenen Dokuments und fragt interaktiv, ob die lokale Quelldatei in den Papierkorb verschoben werden soll. Eine Wiedervorlage/Deck-Integration kann trotzdem gegen das bereits vorhandene Paperless-Dokument laufen.
+```bash
+python -m compileall paperless_nc_import
+PYTHONPATH=. pytest -q
+python scripts/validate_rulesets.py paperless_nc_import/rulesets/builtin
+```
+
+## Projektstatus
+
+Das Projekt ist im Aufbau. Die aktuelle Linie ist:
+
+```text
+v0.7.x  Desktop-GUI, Paperless-Import, OCR, Nextcloud-Rückverweise
+v0.8.x  Extractor-Adapter, Rollenmodell, invoice2data, DuckDB-Sink
+v0.9.x  Deck-/E-Akten-Workflow, lokales Lernen, Community-Rulesets
+```
+
+## Lizenz
+
+Siehe [LICENSE](LICENSE).

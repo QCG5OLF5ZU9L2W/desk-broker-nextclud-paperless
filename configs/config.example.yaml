@@ -168,8 +168,10 @@ extraction:
   field_roles:
     # Beispiel aus Paperless: Rechnungsbetrag [#3, monetary]
     "3": "amount.total"
-    # Weitere Rollen für spätere Ausbaustufen:
+    # Weitere Rollen:
     # "19": "amount.vat"
+    # "20": "date.invoice"
+    # "21": "date.due"
     # "6": "bank.iban"
 
 community_learning:
@@ -190,6 +192,13 @@ community_learning:
     send_paths: false
     send_document_ids: false
     send_installation_id: false
+
+analytics:
+  duckdb:
+    # Optionaler lokaler Analytics-Sink für Metabase/DuckDB.
+    # Kein OCR-Volltext, kein lokaler Pfad und keine Dokumentinhalte werden gespeichert.
+    enabled: false
+    path: "~/.local/share/paperless-nc-import/analytics.duckdb"
 
 gui:
   enabled: true

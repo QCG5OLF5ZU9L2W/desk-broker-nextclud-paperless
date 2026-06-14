@@ -44,3 +44,35 @@ extraction:
     assert cfg.extraction.enabled is True
     assert cfg.extraction.locale == "de"
     assert cfg.extraction.field_roles == {3: "amount.total", 19: "amount.vat"}
+
+
+def test_config_loads_community_learning_consent_and_privacy_defaults(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        """
+community_learning:
+  enabled: true
+  endpoint: "https://learning.example.test/api/v1/"
+  consent:
+    granted: true
+    version: 1
+    granted_at: "2026-06-14T10:00:00+02:00"
+    method: gui
+  mode:
+    submit: queue_and_review
+  privacy:
+    send_values: false
+    send_ocr_text: false
+    send_paths: false
+    send_document_ids: false
+    send_installation_id: false
+""".strip(),
+        encoding="utf-8",
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.community_learning.enabled is True
+    assert cfg.community_learning.endpoint == "https://learning.example.test/api/v1"
+    assert cfg.community_learning.consent.granted is True
+    assert cfg.community_learning.consent.method == "gui"
+    assert cfg.community_learning.mode.submit == "queue_and_review"
+    assert cfg.community_learning.privacy.send_values is False

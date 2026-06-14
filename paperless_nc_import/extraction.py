@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import re
 
-from .extraction_rulesets import extract_role_candidates, infer_field_role
+from .extraction_rulesets import infer_field_role
+from .extractors import extract_role_values
 
 
 @dataclass(slots=True)
@@ -256,10 +257,14 @@ def extract_custom_field_matches(
         role = (field_role or "").strip() or infer_field_role(
             field_name=field_name, field_type=field_type, locale=locale
         )
-        for candidate in extract_role_candidates(
-            role=role, field_type=field_type, text=text, locale=locale
+        for candidate in extract_role_values(
+            role=role,
+            field_type=field_type,
+            text=text,
+            locale=locale,
+            sources=sources,
         ):
-            value = normalize_value(candidate.raw_value, "monetary", field_type)
+            value = candidate.value or normalize_value(candidate.raw_value, "monetary", field_type)
             if not value:
                 continue
             matches.append(
@@ -271,15 +276,15 @@ def extract_custom_field_matches(
                         field_name=field_name,
                         field_type=field_type,
                         source="ocr_text",
-                        extractor="builtin_ruleset",
-                        normalize="monetary",
+                        extractor=candidate.extractor or candidate.backend or "extractor_adapter",
+                        normalize="",
                         priority=1000,
                         label=candidate.label_normalized,
                     ),
                     confidence=candidate.confidence,
                     role=candidate.role,
                     label_normalized=candidate.label_normalized,
-                    extractor=candidate.extractor,
+                    extractor=candidate.extractor or candidate.backend,
                 )
             )
     return matches

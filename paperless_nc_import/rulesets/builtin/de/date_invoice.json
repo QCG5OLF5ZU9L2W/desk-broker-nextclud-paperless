@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "locale": "de",
+  "role": "date.invoice",
+  "field_type": "date",
+  "value_type": "date",
+  "version": "builtin-2026.06.14",
+  "description": "Deutsche Label-Anker für Rechnungs-/Belegdatum. Enthält keine Datumswerte.",
+  "label_groups": {
+    "date_label": [
+      {"text": "rechnungsdatum", "weight": 0.96},
+      {"text": "belegdatum", "weight": 0.94},
+      {"text": "beleg datum", "weight": 0.90},
+      {"text": "ausstellungsdatum", "weight": 0.90},
+      {"text": "datum", "weight": 0.70}
+    ]
+  }
+}

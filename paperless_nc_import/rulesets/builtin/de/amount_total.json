@@ -5,25 +5,37 @@
   "field_type": "monetary",
   "value_type": "money",
   "version": "builtin-2026.06.14",
-  "description": "Deutsche Label-Ausdrücke, die typischerweise den Gesamt-/Brutto-/Zahlbetrag eines Belegs, einer Rechnung oder eines Kaufvertrags bezeichnen. Es werden nur Label-Anker gepflegt, niemals erkannte Werte.",
-  "labels": [
-    {"text": "endsumme", "weight": 0.98},
-    {"text": "e n d s u m m e", "weight": 0.98},
-    {"text": "endbetrag", "weight": 0.96},
-    {"text": "gesamtbetrag", "weight": 0.96},
-    {"text": "rechnungsbetrag", "weight": 0.96},
-    {"text": "rechnungssumme", "weight": 0.94},
-    {"text": "zu zahlen", "weight": 0.93},
-    {"text": "zahlbetrag", "weight": 0.92},
-    {"text": "betrag zahlbar", "weight": 0.90},
-    {"text": "betrag gezahlt", "weight": 0.88},
-    {"text": "gesamtpreis", "weight": 0.88},
-    {"text": "kaufpreis", "weight": 0.87},
-    {"text": "bruttobetrag", "weight": 0.86},
-    {"text": "brutto", "weight": 0.76},
-    {"text": "summe", "weight": 0.72},
-    {"text": "kartenzahlung", "weight": 0.72},
-    {"text": "fahrzeugpreis", "weight": 0.88},
-    {"text": "fahrzeugpreis inklusive nebenkosten", "weight": 0.96}
-  ]
+  "description": "Deutsche Label-Anker und Kontextklassen für den Gesamt-/Brutto-/Zahlbetrag. Enthält keine Beträge, keine OCR-Ausschnitte und keine Dokumentdaten.",
+  "label_groups": {
+    "strong_total": [
+      {"text": "endsumme", "weight": 0.96},
+      {"text": "endbetrag", "weight": 0.95},
+      {"text": "gesamtbetrag", "weight": 0.95},
+      {"text": "rechnungssumme", "weight": 0.94},
+      {"text": "rechnungsbetrag", "weight": 0.94},
+      {"text": "zu zahlen", "weight": 0.95},
+      {"text": "zahlbetrag", "weight": 0.92},
+      {"text": "betrag zahlbar", "weight": 0.90},
+      {"text": "betrag gezahlt", "weight": 0.88},
+      {"text": "gesamtpreis", "weight": 0.89},
+      {"text": "kaufpreis", "weight": 0.88},
+      {"text": "fahrzeugpreis", "weight": 0.88},
+      {"text": "fahrzeugpreis inklusive nebenkosten", "weight": 0.96}
+    ],
+    "weak_total": [
+      {"text": "bruttobetrag", "weight": 0.80},
+      {"text": "brutto", "weight": 0.70},
+      {"text": "summe", "weight": 0.66},
+      {"text": "betrag", "weight": 0.60}
+    ],
+    "payment_confirmation": [
+      {"text": "kartenzahlung", "weight": 0.78},
+      {"text": "kreditkarte", "weight": 0.78},
+      {"text": "ec cash", "weight": 0.76},
+      {"text": "girocard", "weight": 0.76},
+      {"text": "barzahlung", "weight": 0.74},
+      {"text": "visa", "weight": 0.70},
+      {"text": "mastercard", "weight": 0.70}
+    ]
+  }
 }
