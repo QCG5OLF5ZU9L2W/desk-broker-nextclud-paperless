@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
-from typing import Any
 
 from .base import BaseExtractor, ExtractorInput, ExtractorResult
 from .normalizers import normalize_date, normalize_label
 from .paddleocr_layout_amount import (
     LayoutRecord,
     LayoutRow,
-    build_rows,
     _load_or_run_paddle_records,
     _load_paddle_config,
     _source_path,
+    build_rows,
 )
 
 DATE_PATTERN = re.compile(
@@ -27,23 +27,26 @@ DATE_PATTERN = re.compile(
 INVOICE_DATE_LABELS = {
     "datum",
     "belegdatum",
+    "bon datum",
+    "kassenbon datum",
     "rechnungsdatum",
     "rechnung vom",
     "rechnung",
     "vom",
-    "kaufdatum",
-    "verkaufsdatum",
     "verkauf",
+    "verkaufsdatum",
+    "kaufdatum",
+    "lieferschein",
     "lieferdatum",
     "leistungsdatum",
-    "bon datum",
-    "kassenbon",
+    "ausgestellt",
+    "ausstellungsdatum",
 }
 DUE_DATE_LABELS = {
-    "faellig",
     "fällig",
-    "faellig am",
+    "faellig",
     "fällig am",
+    "faellig am",
     "zahlbar bis",
     "zahlungsziel",
     "zahlungsfrist",
@@ -53,32 +56,38 @@ DUE_DATE_LABELS = {
     "payable until",
 }
 PAYMENT_CONTEXT_LABELS = {
-    "bezahlung",
     "zahlung erfolgt",
+    "bezahlung",
+    "kundenbeleg",
     "kartenzahlung",
     "kreditkarte",
     "bar",
+    "bar euro",
     "visa",
-    "kundenbeleg",
-    "ec beleg",
+    "mastercard",
+    "maestro",
+    "girocard",
+    "ec",
+    "terminal",
 }
-REJECT_CONTEXT_LABELS = {
+TECHNICAL_CONTEXT_LABELS = {
+    "tse",
     "start",
     "ende",
-    "tse",
     "transaktion",
     "transaktionsnummer",
     "signatur",
-    "signaturzaehler",
+    "signaturzähler",
     "signaturzahler",
-    "terminal",
-    "tid",
     "t id",
-    "beleg nr",
-    "bon nr",
+    "t-id",
+    "tid",
+    "terminal id",
+    "vu nummer",
 }
 TAX_CONTEXT_LABELS = {
     "mwst",
+    "mhst",
     "ust",
     "steuer",
     "netto",
@@ -97,16 +106,6 @@ class LayoutDate:
 
 
 class PaddleOCRLayoutDateExtractor(BaseExtractor):
-    """Geometry/context date extractor for OCR scans.
-
-    This extractor is deliberately layout- and role-based, not vendor-based.
-    It handles:
-    - explicit labels: Datum, Rechnungsdatum, Rechnung ... vom
-    - due labels: Fällig am, zahlbar bis, Zahlungsziel
-    - receipt/payment blocks where a payment date is the best available receipt date
-    - rejection of TSE/signature/start/end technical timestamps unless strongly labeled
-    """
-
     name = "paddleocr_layout_date"
     priority = 43
 
@@ -120,7 +119,6 @@ class PaddleOCRLayoutDateExtractor(BaseExtractor):
         source_path = _source_path(item.sources or {})
         if not source_path:
             return []
-
         pdf = Path(source_path).expanduser()
         if not pdf.exists():
             return []
@@ -134,10 +132,7 @@ class PaddleOCRLayoutDateExtractor(BaseExtractor):
             return []
 
         rows = build_rows(records)
-        candidates = list(iter_date_candidates(rows))
-        if not candidates:
-            return []
-
+        candidates = iter_date_candidates(rows)
         scored: list[tuple[float, LayoutDate, str, str]] = []
         for candidate in candidates:
             score, label, explanation = score_date_candidate(candidate, rows, role)
@@ -165,130 +160,174 @@ class PaddleOCRLayoutDateExtractor(BaseExtractor):
 
 
 def iter_date_candidates(rows: list[LayoutRow]) -> list[LayoutDate]:
-    found: list[LayoutDate] = []
-
+    result: list[LayoutDate] = []
     for idx, row in enumerate(rows):
         text = _clean_date_text(row.text)
         for match in DATE_PATTERN.finditer(text):
             raw = match.group(1)
-            value = normalize_date(raw)
-            if not value:
-                continue
-            found.append(LayoutDate(value=value, raw=raw, row_index=idx, row=row))
-
-    return found
+            value = _normalize_date_value(raw)
+            if value:
+                result.append(LayoutDate(value=value, raw=raw, row_index=idx, row=row))
+    return result
 
 
 def score_date_candidate(candidate: LayoutDate, rows: list[LayoutRow], role: str) -> tuple[float, str, str]:
     row_norm = candidate.row.normalized
-    context_rows = _row_window(rows, candidate.row_index, radius=3)
+    idx = candidate.row_index
+
+    context_rows = _row_window(rows, idx, radius=3)
     context_norm = " ".join(row.normalized for row in context_rows)
 
-    row_invoice_label = _contains_any(row_norm, INVOICE_DATE_LABELS)
-    context_invoice_label = _contains_any(context_norm, INVOICE_DATE_LABELS)
-    row_due_label = _contains_any(row_norm, DUE_DATE_LABELS)
-    context_due_label = _contains_any(context_norm, DUE_DATE_LABELS)
-    row_payment_label = _contains_any(row_norm, PAYMENT_CONTEXT_LABELS)
-    context_payment_label = _contains_any(context_norm, PAYMENT_CONTEXT_LABELS)
-    row_reject_label = _contains_any(row_norm, REJECT_CONTEXT_LABELS)
-    context_reject_label = _contains_any(context_norm, REJECT_CONTEXT_LABELS)
-    row_tax_label = _contains_any(row_norm, TAX_CONTEXT_LABELS)
+    row_invoice = _contains_any(row_norm, INVOICE_DATE_LABELS)
+    ctx_invoice = _contains_any(context_norm, INVOICE_DATE_LABELS)
+    row_due = _contains_any(row_norm, DUE_DATE_LABELS)
+    ctx_due = _contains_any(context_norm, DUE_DATE_LABELS)
+    row_payment = _contains_any(row_norm, PAYMENT_CONTEXT_LABELS)
+    ctx_payment = _contains_any(context_norm, PAYMENT_CONTEXT_LABELS)
+    row_tech = _contains_any(row_norm, TECHNICAL_CONTEXT_LABELS)
+    ctx_tech = _contains_any(context_norm, TECHNICAL_CONTEXT_LABELS)
+    row_tax = _contains_any(row_norm, TAX_CONTEXT_LABELS)
 
-    invoice_label = row_invoice_label or context_invoice_label
-    due_label = row_due_label or context_due_label
-    payment_label = row_payment_label or context_payment_label
-    reject_label = row_reject_label or context_reject_label
+    near_before = rows[max(0, idx - 6) : idx + 1]
+    near_after = rows[idx : min(len(rows), idx + 3)]
+    near_rows = near_before + near_after
+
+    near_payment = ""
+    for row in near_rows:
+        near_payment = _contains_any(row.normalized, PAYMENT_CONTEXT_LABELS)
+        if near_payment:
+            break
+
+    near_invoice = ""
+    for row in near_rows:
+        near_invoice = _contains_any(row.normalized, INVOICE_DATE_LABELS)
+        if near_invoice:
+            break
+
+    near_money = any(re.search(r"\d{1,6}[,.]\d{2}|\bEUR\b", row.text, re.I) for row in near_rows)
+
+    page_rows = [r for r in rows if r.page == candidate.row.page]
+    if page_rows:
+        pos = page_rows.index(candidate.row) / max(1, len(page_rows) - 1)
+    else:
+        pos = 0.0
 
     score = 0.10
     reasons: list[str] = []
 
     if role == "date.due":
-        if not due_label:
-            return 0.0, "", "reject due date without due label"
+        if not (row_due or ctx_due):
+            return 0.0, "", "reject due date without due context"
 
-        if row_due_label:
+        if row_due:
             score += 0.88
-            reasons.append(f"row_due_label={row_due_label}")
+            reasons.append(f"row_due={row_due}")
         else:
             score += 0.48
-            reasons.append(f"context_due_label={context_due_label}")
+            reasons.append(f"context_due={ctx_due}")
 
-        # A row that explicitly says Rechnungsdatum/Datum is very likely not due date,
-        # even if a nearby row contains "Fällig am".
-        if row_invoice_label and not row_due_label:
-            score -= 0.50
-            reasons.append(f"row_invoice_context_penalty={row_invoice_label}")
-        elif context_invoice_label and not row_due_label:
-            score -= 0.12
-            reasons.append(f"context_invoice_penalty={context_invoice_label}")
+        if row_invoice and not row_due:
+            score -= 0.55
+            reasons.append(f"row_invoice_penalty={row_invoice}")
+        elif ctx_invoice and not row_due:
+            score -= 0.14
+            reasons.append(f"context_invoice_penalty={ctx_invoice}")
 
-    elif role in {"date.invoice", "date.receipt", "date.document", "date.service"}:
-        # A row explicitly marked as due date is not an invoice/receipt date.
-        if row_due_label and not row_invoice_label:
-            return 0.0, row_due_label, "reject due row for invoice date role"
+        label = row_due or ctx_due
+        return max(0.0, score), label, "; ".join(reasons)
 
-        if row_invoice_label:
-            score += 0.78
-            reasons.append(f"row_invoice_label={row_invoice_label}")
-        elif context_invoice_label:
-            score += 0.48
-            reasons.append(f"context_invoice_label={context_invoice_label}")
+    # date.invoice/date.receipt/date.document/date.service
+    if row_due and not row_invoice:
+        return 0.0, row_due, "reject due row for invoice/document date"
 
-        # Receipt/payment block may contain the only reliable receipt date.
-        if row_payment_label:
-            score += 0.30
-            reasons.append(f"row_payment_context={row_payment_label}")
-        elif context_payment_label:
-            score += 0.18
-            reasons.append(f"context_payment_context={context_payment_label}")
+    # Technical timestamps are valid fallback evidence for a receipt/document date,
+    # but they must not beat a stronger business/payment-date candidate.
+    if row_tech and not (row_invoice or row_payment):
+        if _has_nontechnical_business_or_payment_date(rows, skip_row_index=idx):
+            return 0.0, row_tech, "reject technical timestamp because business/payment date exists"
 
-        if role == "date.service" and "leistungsdatum" in context_norm:
-            score += 0.22
-            reasons.append("service_date_label")
-
-        if reject_label and not invoice_label and not payment_label:
-            return 0.0, reject_label, "reject technical timestamp context"
-
-        if not (invoice_label or payment_label):
-            # Safe fallback only for top-of-page clearly date-like records; otherwise
-            # no suggestion is better than a wrong date.
-            page_rows = [r for r in rows if r.page == candidate.row.page]
-            if page_rows:
-                pos = page_rows.index(candidate.row) / max(1, len(page_rows) - 1)
-                if pos <= 0.18:
-                    score += 0.30
-                    reasons.append("top_section_fallback")
-                else:
-                    return 0.0, "", "reject unlabeled date outside header/payment context"
-
-    if row_reject_label and not (row_invoice_label or row_due_label or row_payment_label):
-        score -= 0.35
-        reasons.append(f"row_technical_context_penalty={row_reject_label}")
-    elif context_reject_label and not (row_invoice_label or row_due_label or row_payment_label):
-        score -= 0.16
-        reasons.append(f"context_technical_context_penalty={context_reject_label}")
-
-    if row_tax_label:
-        score -= 0.15
-        reasons.append(f"tax_context_penalty={row_tax_label}")
-
-    # Same-row label is stronger than context label.
-    if DATE_PATTERN.search(candidate.row.text):
-        if role == "date.due" and row_due_label:
-            score += 0.10
-            reasons.append("same_row_due_label_date")
-        elif role != "date.due" and row_invoice_label:
-            score += 0.10
-            reasons.append("same_row_invoice_label_date")
-        elif row_payment_label:
+        score += 0.58
+        reasons.append(f"technical_timestamp_fallback={row_tech}")
+        if pos <= 0.25:
             score += 0.06
-            reasons.append("same_row_payment_date")
+            reasons.append("technical_top_section")
+        label = row_tech
+        return max(0.0, score), label, "; ".join(reasons)
 
-    if role == "date.due":
-        label = row_due_label or context_due_label
-    else:
-        label = row_invoice_label or context_invoice_label or row_payment_label or context_payment_label
+    if row_invoice:
+        score += 0.84
+        reasons.append(f"row_invoice={row_invoice}")
+    elif ctx_invoice:
+        score += 0.44
+        reasons.append(f"context_invoice={ctx_invoice}")
+    elif near_invoice:
+        score += 0.32
+        reasons.append(f"near_invoice={near_invoice}")
+
+    # Receipt/payment blocks often contain the only clean business date.
+    if row_payment:
+        score += 0.40
+        reasons.append(f"row_payment={row_payment}")
+    elif ctx_payment:
+        score += 0.36
+        reasons.append(f"context_payment={ctx_payment}")
+    elif near_payment:
+        score += 0.30
+        reasons.append(f"near_payment={near_payment}")
+
+    if near_money and (row_payment or ctx_payment or near_payment):
+        score += 0.18
+        reasons.append("near_money_in_payment_block")
+
+    if role == "date.service" and "leistungsdatum" in context_norm:
+        score += 0.22
+        reasons.append("service_label")
+
+    if pos <= 0.20 and (row_invoice or ctx_invoice or near_invoice):
+        score += 0.22
+        reasons.append("top_section_business_date")
+    elif pos >= 0.50 and (row_payment or ctx_payment or near_payment):
+        score += 0.24
+        reasons.append("lower_payment_section")
+
+    if row_tax:
+        score -= 0.20
+        reasons.append(f"tax_row_penalty={row_tax}")
+
+    if ctx_tech and not (row_invoice or ctx_invoice or near_invoice or row_payment or ctx_payment or near_payment):
+        score -= 0.18
+        reasons.append(f"technical_context_penalty={ctx_tech}")
+
+    has_business_context = row_invoice or ctx_invoice or near_invoice or row_payment or ctx_payment or near_payment
+    if not has_business_context:
+        return 0.0, "", "reject unlabeled/non-payment date"
+
+    label = row_invoice or ctx_invoice or near_invoice or row_payment or ctx_payment or near_payment
     return max(0.0, score), label, "; ".join(reasons)
+
+
+def _has_nontechnical_business_or_payment_date(rows: list[LayoutRow], *, skip_row_index: int) -> bool:
+    for candidate in iter_date_candidates(rows):
+        if candidate.row_index == skip_row_index:
+            continue
+
+        row_norm = candidate.row.normalized
+        context_rows = _row_window(rows, candidate.row_index, radius=3)
+        context_norm = " ".join(row.normalized for row in context_rows)
+
+        row_tech = _contains_any(row_norm, TECHNICAL_CONTEXT_LABELS)
+        row_due = _contains_any(row_norm, DUE_DATE_LABELS)
+        if row_tech or row_due:
+            continue
+
+        if _contains_any(row_norm, INVOICE_DATE_LABELS) or _contains_any(context_norm, INVOICE_DATE_LABELS):
+            return True
+
+        near_rows = rows[max(0, candidate.row_index - 6) : min(len(rows), candidate.row_index + 3)]
+        if any(_contains_any(row.normalized, PAYMENT_CONTEXT_LABELS) for row in near_rows):
+            return True
+
+    return False
 
 
 def _row_window(rows: list[LayoutRow], idx: int, radius: int) -> list[LayoutRow]:
@@ -298,8 +337,9 @@ def _row_window(rows: list[LayoutRow], idx: int, radius: int) -> list[LayoutRow]
 def _contains_any(norm: str, labels: set[str]) -> str:
     norm = normalize_label(norm)
     for label in sorted(labels, key=len, reverse=True):
-        if normalize_label(label) in norm:
-            return normalize_label(label)
+        n_label = normalize_label(label)
+        if n_label and n_label in norm:
+            return n_label
     return ""
 
 
@@ -309,3 +349,33 @@ def _clean_date_text(text: str) -> str:
     text = re.sub(r"(\d)\s*([.\-/])\s*(\d)", r"\1\2\3", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
+
+
+def _normalize_date_value(raw: str) -> str:
+    raw = _clean_date_text(raw)
+
+    # ISO timestamps from TSE/signature/payment blocks must be parsed before
+    # fuzzy/dateparser fallback. Otherwise strings like 2026-06-13T... may be
+    # misread as 2013-06-26 by locale heuristics.
+    m = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?)?", raw)
+    if m:
+        try:
+            return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+        except ValueError:
+            return ""
+
+    # German/common document dates: 13.06.2026, 13/06/26, 13-06-2026.
+    m = re.search(r"\b(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{2,4})\b", raw)
+    if m:
+        day = int(m.group(1))
+        month = int(m.group(2))
+        year = int(m.group(3))
+        if year < 100:
+            year += 2000
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return ""
+
+    value = normalize_date(raw)
+    return value or ""
