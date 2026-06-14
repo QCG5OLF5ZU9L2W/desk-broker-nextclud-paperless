@@ -252,3 +252,13 @@ PaddleOCR is used as a local layout/OCR backend. It does not decide business fie
 - rejection of item rows, unit-price rows, tax tables, refunds and discounts.
 
 This is deliberately not vendor-specific and does not upload OCR text or document content.
+
+### Layout-based date extraction
+
+PaddleOCR layout extraction is also used for date roles. The extractor does not look for one fixed receipt layout. It scores OCR rows by role and context:
+
+- `date.invoice`, `date.receipt`, `date.document`: labels such as `Datum`, `Belegdatum`, `Rechnungsdatum`, `Rechnung ... vom`, `Verkauf`;
+- `date.due`: labels such as `Fällig am`, `zahlbar bis`, `Zahlungsziel`;
+- technical timestamps such as TSE `Start`, `Ende`, transaction or signature timestamps are rejected unless there is a stronger business-date label.
+
+This keeps OCR layout handling separate from business role extraction.
