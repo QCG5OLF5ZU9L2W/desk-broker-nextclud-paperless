@@ -415,10 +415,27 @@ class CustomFieldEditor(QWidget):
         self.form_layout.addRow(buttons)
         self._show_by_type(None)
 
+        self.extraction_debug_label = Gtk.Label(label="")
+        self.extraction_debug_label.set_xalign(0)
+        self.extraction_debug_label.set_selectable(True)
+        self.extraction_debug_label.set_line_wrap(True)
+        try:
+            self.grid.attach(self.extraction_debug_label, 1, 3, 2, 1)
+        except Exception:
+            try:
+                self.pack_start(self.extraction_debug_label, False, False, 0)
+            except Exception:
+                pass
+
     def set_context(self, sources: dict[str, Callable[[], Any]], base_dates: dict[str, date]) -> None:
         self.sources = sources
         self.date_value.set_base_dates(base_dates)
         self._populate_sources()
+
+
+    def set_extraction_debug(self, text: str) -> None:
+        if hasattr(self, "extraction_debug_label"):
+            self.extraction_debug_label.set_text(text or "")
 
     def set_field(
         self,

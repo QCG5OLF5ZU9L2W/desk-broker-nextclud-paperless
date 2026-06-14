@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +32,8 @@ from ..config import AppConfig
 from ..deck_client import DeckClient, resolve_deck_route, find_followup_date
 from ..effort import EffortParseError, parse_effort
 from ..extraction import extract_custom_field_value
+
+LOG = logging.getLogger(__name__)
 from ..fs_utils import collect_input_files
 from ..importer import Importer
 from ..logging_utils import AppLogger
@@ -656,6 +660,7 @@ class MainWindow(QMainWindow):
                 prefill_value = extracted.value
         if prefill_value not in (None, "") and str(prefill_value) not in suggestions:
             suggestions.insert(0, str(prefill_value))
+        self._set_custom_extraction_debug("")
         self.custom_editor.set_field(field, suggestions, prefill_value=prefill_value)
         self._refresh_custom_context()
 
@@ -703,6 +708,46 @@ class MainWindow(QMainWindow):
         self._extraction_text_cache = text
         return text
 
+
+    def _format_extraction_match_debug(self, match):
+        """Return a compact, user-visible explanation for a Custom-Field prefill."""
+        if not match:
+            return "Kein Extraktionsvorschlag."
+
+        parts = []
+        extractor = getattr(match, "extractor", None)
+        role = getattr(match, "role", None)
+        label = getattr(match, "label_normalized", None)
+        confidence = getattr(match, "confidence", None)
+        raw = getattr(match, "raw", None)
+
+        if extractor:
+            parts.append(f"Engine: {extractor}")
+        if role:
+            parts.append(f"Rolle: {role}")
+        if label:
+            parts.append(f"Anker: {label}")
+        if confidence is not None:
+            try:
+                parts.append(f"Confidence: {float(confidence):.2f}")
+            except Exception:
+                parts.append(f"Confidence: {confidence}")
+        if raw:
+            raw_s = str(raw).strip().replace("\n", " ")
+            if len(raw_s) > 80:
+                raw_s = raw_s[:77] + "..."
+            parts.append(f"Rohwert: {raw_s}")
+
+        return " | ".join(parts) if parts else "Extraktionsvorschlag vorhanden."
+
+    def _set_custom_extraction_debug(self, text):
+        """Best-effort: show extraction provenance in the existing CustomFieldEditor if supported."""
+        try:
+            if hasattr(self, "custom_editor") and hasattr(self.custom_editor, "set_extraction_debug"):
+                self.custom_editor.set_extraction_debug(text or "")
+        except Exception:
+            LOG.exception("Could not update custom extraction debug label")
+
     def _extract_custom_prefill(self, field: CustomField):
         if not self.cfg.extraction.enabled:
             return None
@@ -712,7 +757,7 @@ class MainWindow(QMainWindow):
             return None
         info = self.current_info
         field_role = self.cfg.extraction.field_roles.get(field.id, "")
-        return extract_custom_field_value(
+        match = extract_custom_field_value(
             field_id=field.id,
             field_name=field.name if self.cfg.extraction.infer_roles_from_field_names else "",
             field_type=field.normalized_type,
@@ -729,6 +774,8 @@ class MainWindow(QMainWindow):
             locale=self.cfg.extraction.locale,
             use_builtin_rulesets=True,
         )
+        self._set_custom_extraction_debug(self._format_extraction_match_debug(match))
+        return match
 
     def _refresh_custom_context(self) -> None:
         info = self.current_info
