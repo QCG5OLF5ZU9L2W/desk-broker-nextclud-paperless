@@ -146,11 +146,14 @@ class MainWindow(QMainWindow):
         self.resize(1500, 950)
         self._build_ui()
         self._auto_ocr_started_once = False
-        QTimer.singleShot(900, self._auto_run_ocr_if_missing_text_layer)
-        QTimer.singleShot(2500, self._auto_run_ocr_if_missing_text_layer)
         QTimer.singleShot(5000, self._auto_run_ocr_if_missing_text_layer)
         self._fill_file_values()
         self._fill_nextcloud_values()
+        self._auto_ocr_started_once = False
+        QTimer.singleShot(600, self.check_ocr)
+        QTimer.singleShot(1300, self._auto_run_ocr_if_missing_text_layer)
+        QTimer.singleShot(5000, self._auto_run_ocr_if_missing_text_layer)
+        QTimer.singleShot(7000, self._prefill_document_date_from_extraction)
         if self.current_info:
             self.pdf.load(self.current_info.current_path)
         self._start_metadata_load()
@@ -535,6 +538,9 @@ class MainWindow(QMainWindow):
                 self.ocr_status.setText(f"Keine ausreichende Textschicht gefunden ({chars} Zeichen). OCR empfohlen.")
                 self.ocr_progress.setValue(0)
                 self.ocr_progress.setFormat("OCR empfohlen")
+                if not getattr(self, "_auto_ocr_started_once", False):
+                    self._auto_ocr_started_once = True
+                    QTimer.singleShot(50, lambda: self.run_ocr(False))
         except Exception as exc:
             self.ocr_status.setText(f"OCR-Prüfung fehlgeschlagen: {exc}")
 
@@ -583,8 +589,12 @@ class MainWindow(QMainWindow):
                 self.pdf.load(out_pdf)
             sidecar = getattr(result, "sidecar_txt", None)
             if sidecar and Path(sidecar).exists():
-                self.pdf.show_text(Path(sidecar).read_text(encoding="utf-8", errors="replace"))
+                try:
+                    self.pdf.show_text(Path(sidecar).read_text(encoding="utf-8", errors="replace"))
+                except Exception as view_exc:
+                    self.logger.warning("OCR-Textanzeige konnte nicht aktualisiert werden: %s", view_exc)
             self._clear_extraction_text_cache()
+            self._prefill_document_date_from_extraction()
             if self.selected_custom_field:
                 self._open_custom_field(self.selected_custom_field)
         except Exception as exc:
@@ -759,8 +769,6 @@ class MainWindow(QMainWindow):
             return None
         rules = self.cfg.custom.custom_field_extraction_rules
         text = self._current_extraction_text()
-        if not text:
-            return None
         info = self.current_info
         field_role = self.cfg.extraction.field_roles.get(field.id, "")
         match = extract_custom_field_value(
@@ -1090,24 +1098,28 @@ class MainWindow(QMainWindow):
 
 
 
+
     def _auto_run_ocr_if_missing_text_layer(self) -> None:
         try:
             if getattr(self, "_auto_ocr_started_once", False):
                 return
+            if not getattr(self, "current_info", None):
+                return
 
             texts = []
-            for widget in self.findChildren((QLabel, QLineEdit, QTextEdit)):
-                try:
-                    if hasattr(widget, "toPlainText"):
-                        value = widget.toPlainText()
-                    else:
-                        value = widget.text()
-                    if value:
-                        texts.append(str(value))
-                except Exception:
-                    pass
+            for widget_type in (QLabel, QLineEdit, QTextEdit):
+                for widget in self.findChildren(widget_type):
+                    try:
+                        if hasattr(widget, "toPlainText"):
+                            value = widget.toPlainText()
+                        else:
+                            value = widget.text()
+                        if value:
+                            texts.append(str(value))
+                    except Exception:
+                        pass
 
-            joined = "\n".join(texts).casefold()
+            joined = "\\n".join(texts).casefold()
             missing_text = (
                 "ocr empfohlen" in joined
                 or "keine ausreichende textschicht" in joined
@@ -1116,15 +1128,8 @@ class MainWindow(QMainWindow):
             if not missing_text:
                 return
 
-            for button in self.findChildren(QPushButton):
-                try:
-                    label = button.text().strip().casefold()
-                except Exception:
-                    continue
-                if label == "ocr starten":
-                    self._auto_ocr_started_once = True
-                    button.click()
-                    return
+            self._auto_ocr_started_once = True
+            QTimer.singleShot(50, lambda: self.run_ocr(False))
         except Exception as exc:
             try:
                 self.logger.warning("Auto-OCR konnte nicht gestartet werden: %s", exc)
