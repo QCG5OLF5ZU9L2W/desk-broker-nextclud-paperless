@@ -6,30 +6,14 @@ keywords:
   - Order Number
 
 fields:
-  amount:
-    parser: regex
-    regex: 'Total\s+€([0-9]+\.[0-9]{2})'
-    type: float
-
-  date:
-    parser: regex
-    regex: 'Invoice Date:\s+([A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4})'
-    type: date
-
-  invoice_number:
-    parser: regex
-    regex: 'Order Number:\s+([0-9]+)'
-
-  order_date:
-    parser: regex
-    regex: 'Order Date:\s+([A-Za-z]+\s+[0-9]{1,2},\s+[0-9]{4})'
-    type: date
-
-  payment_method:
-    parser: regex
-    regex: 'Payment Method:\s+([A-Za-z0-9 -]+)'
+  amount: '€\s*([0-9]+[.,][0-9]{2})'
+  date: 'Invoice Date:[^\r\n]*?([A-Za-z]+ [0-9]{1,2}, [0-9]{4})'
+  invoice_number: 'Order Number:[^\r\n]*?([0-9]+)'
+  order_date: 'Order Date:[^\r\n]*?([A-Za-z]+ [0-9]{1,2}, [0-9]{4})'
+  payment_method: 'Payment Method:[^\r\n]*?([A-Za-z0-9 -]+)'
 
 options:
   currency: EUR
+  decimal_separator: '.'
   date_formats:
     - '%B %d, %Y'
