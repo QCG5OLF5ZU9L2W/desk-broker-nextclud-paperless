@@ -16,6 +16,7 @@ Ziel ist nicht, Paperless zu ersetzen. Paperless bleibt die Quelle der Wahrheit 
 * Papierkorb-/Aufräumlogik nach bewusster Nutzerentscheidung
 * Nautilus-Integration für GNOME/Linux
 * Vorbereitung für Nextcloud Deck als Workflow-/E-Akten-Cockpit
+* Anlegen von Arbeitsvorräten aus Wiedervorlagen in Nextcloud Deck
 
 ## Grundidee
 
