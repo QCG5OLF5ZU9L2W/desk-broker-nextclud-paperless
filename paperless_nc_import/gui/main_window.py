@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QTextEdit
+
 import logging
 
 from datetime import date, datetime
@@ -143,6 +145,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Paperless Nextcloud Import")
         self.resize(1500, 950)
         self._build_ui()
+        self._auto_ocr_started_once = False
+        QTimer.singleShot(900, self._auto_run_ocr_if_missing_text_layer)
+        QTimer.singleShot(2500, self._auto_run_ocr_if_missing_text_layer)
+        QTimer.singleShot(5000, self._auto_run_ocr_if_missing_text_layer)
         self._fill_file_values()
         self._fill_nextcloud_values()
         if self.current_info:
@@ -1081,6 +1087,49 @@ class MainWindow(QMainWindow):
         self.logger.error(message)
         self.log.setPlainText(self.logger.text())
         QMessageBox.critical(self, "Fehler", message)
+
+
+
+    def _auto_run_ocr_if_missing_text_layer(self) -> None:
+        try:
+            if getattr(self, "_auto_ocr_started_once", False):
+                return
+
+            texts = []
+            for widget in self.findChildren((QLabel, QLineEdit, QTextEdit)):
+                try:
+                    if hasattr(widget, "toPlainText"):
+                        value = widget.toPlainText()
+                    else:
+                        value = widget.text()
+                    if value:
+                        texts.append(str(value))
+                except Exception:
+                    pass
+
+            joined = "\n".join(texts).casefold()
+            missing_text = (
+                "ocr empfohlen" in joined
+                or "keine ausreichende textschicht" in joined
+                or "0 zeichen" in joined
+            )
+            if not missing_text:
+                return
+
+            for button in self.findChildren(QPushButton):
+                try:
+                    label = button.text().strip().casefold()
+                except Exception:
+                    continue
+                if label == "ocr starten":
+                    self._auto_ocr_started_once = True
+                    button.click()
+                    return
+        except Exception as exc:
+            try:
+                self.logger.warning("Auto-OCR konnte nicht gestartet werden: %s", exc)
+            except Exception:
+                pass
 
 
 def run_gui(cfg: AppConfig, logger: AppLogger, files: list[str], *, dry_run: bool, no_cache: bool) -> int:
