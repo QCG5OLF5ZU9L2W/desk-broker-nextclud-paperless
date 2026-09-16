@@ -1,330 +1,155 @@
-# Desk Broker – Nextcloud ↔ Paperless
+# Projektbeschreibung: Paperless Send
 
-Desk Broker ist ein lokales Import- und Workflow-Werkzeug für Dokumente, die aus Nextcloud nach Paperless-ngx übernommen werden sollen.
+## Projektziel
 
-Ziel ist nicht, Paperless zu ersetzen. Paperless bleibt die Quelle der Wahrheit für Archivierung, OCR, Metadaten und Suche. Desk Broker ergänzt den Prozess um eine lokale Vorprüfung, Custom-Field-Befüllung, Nextcloud-Rückverweise und perspektivisch Deck-/E-Akten-Workflows.
+Paperless Send ist eine Firefox-Erweiterung für die schnelle, strukturierte und nachvollziehbare Übergabe von PDF-Dokumenten an Paperless-ngx. Sie verbindet die Dokumentenerfassung direkt mit dem Arbeitsablauf im Browser: PDFs können aus Webseiten, Webmail-Systemen, dem Firefox-PDF-Viewer oder über eine lokale Dateiauswahl übernommen, mit Metadaten versehen und anschließend an eine konfigurierte Paperless-ngx-Instanz übertragen werden.
+
+Ziel des Projekts ist es, die manuelle Ablage von Dokumenten deutlich zu vereinfachen. Wiederkehrende Arbeitsschritte wie Dateidownload, lokales Wiederfinden, Upload, Verschlagwortung, Dublettenprüfung und anschließende Weiterverarbeitung werden in einem einheitlichen Workflow zusammengeführt.
+
+Paperless Send ist eine eigenständige Erweiterung und kein offizielles Add-on des Paperless-ngx-Projekts.
+
+## Einsatzbereich
+
+Die Erweiterung richtet sich insbesondere an Anwenderinnen und Anwender, die regelmäßig PDF-Dokumente aus Webportalen, E-Mails, elektronischen Akten oder lokalen Verzeichnissen in Paperless-ngx übernehmen.
+
+Typische Anwendungsfälle sind:
+
+* Verarbeitung von Rechnungen, Bescheiden, Verträgen und Schriftverkehr,
+* Erfassung umfangreicher Akten mit vielen einzelnen PDF-Dokumenten,
+* Übernahme von PDFs aus Webmail- und Dokumentenportalen,
+* strukturierte Zuordnung von Metadaten bereits vor dem Upload,
+* Vermeidung unbeabsichtigter Mehrfachimporte,
+* Erzeugung öffentlicher Paperless-Freigabelinks,
+* Übergabe von Dokumentfristen an Nextcloud Deck,
+* kontrollierte Löschung lokaler Originaldateien nach erfolgreicher Archivierung.
 
 ## Funktionsumfang
 
-* Import von lokalen oder Nextcloud-synchronisierten Dateien nach Paperless-ngx
-* GUI zur Sichtprüfung vor dem Import
-* Anzeige von PDF/Text/OCR-Inhalten
-* Unterstützung von Paperless Custom Fields
-* Automatische Vorbelegung ausgewählter Custom Fields
-* IBAN-Erkennung mit Prüfziffervalidierung
-* Nextcloud-Rückverweise auf Ursprungspfade
-* Papierkorb-/Aufräumlogik nach bewusster Nutzerentscheidung
-* Nautilus-Integration für GNOME/Linux
-* Vorbereitung für Nextcloud Deck als Workflow-/E-Akten-Cockpit
-* Anlegen von Arbeitsvorräten aus Wiedervorlagen in Nextcloud Deck
-
-## Grundidee
-
-```text
-Nextcloud / lokaler Ordner
-        ↓
-Desk Broker GUI
-        ↓
-OCR / Textanalyse / Custom Fields
-        ↓
-Paperless-ngx
-        ↓
-optional: Nextcloud Deck / E-Akte / Wiedervorlage
-```
-
-Paperless bleibt das Archiv.
-Nextcloud bleibt die Arbeits- und Sync-Struktur.
-Deck kann später Vorgänge, Fristen und Bearbeitungsstände abbilden.
-
-## Installation aus Git
-
-Voraussetzungen unter Debian/Ubuntu:
-
-```bash
-sudo apt update
-sudo apt install -y \
-  git \
-  python3 \
-  python3-venv \
-  python3-pip \
-  make \
-  rsync \
-  poppler-utils \
-  gir1.2-gtk-3.0 \
-  python3-gi
-```
+### Direkte Dokumentübernahme
 
-Projekt klonen:
-
-```bash
-cd ~/Documents
-git clone git@github.com:QCG5OLF5ZU9L2W/desk-broker-nextclud-paperless.git
-cd desk-broker-nextclud-paperless
-```
+PDF-Dokumente können über das Firefox-Kontextmenü, die Symbolleistenschaltfläche, Drag-and-drop oder die normale Dateiauswahl übernommen werden. Direkt erreichbare PDF-Adressen werden aus dem aktiven Browserkontext gelesen.
 
-Falls SSH noch nicht eingerichtet ist, alternativ:
+Bei geschützten Webmail- oder Portalansichten, bei denen ein direkter Abruf nicht möglich ist, kann Paperless Send einen anschließend gestarteten PDF-Download erkennen und übernehmen. Auch im Firefox-PDF-Viewer bearbeitete oder mit Anmerkungen versehene Fassungen lassen sich auf diese Weise erfassen.
 
-```bash
-git clone https://github.com/QCG5OLF5ZU9L2W/desk-broker-nextclud-paperless.git
-```
+### Metadaten und benutzerdefinierte Felder
 
-Virtuelle Python-Umgebung erstellen:
+Vor dem Versand können die von Paperless bereitgestellten Metadaten ausgewählt oder eingetragen werden:
 
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
+* Dokumenttitel,
+* Dokumentdatum einschließlich optionaler Uhrzeit,
+* Tags,
+* Korrespondent,
+* Dokumenttyp,
+* Speicherpfad,
+* benutzerdefinierte Paperless-Felder.
 
-pip install -U pip
-pip install -e .
-```
+Benutzerdefinierte Felder werden entsprechend ihres Paperless-Datentyps verarbeitet. Dazu gehören unter anderem Text-, Zahlen-, Währungs-, Datums-, Auswahl- und Dokumentverknüpfungsfelder.
 
-Installation prüfen:
+Für häufig verwendete Zuordnungen können Profile gespeichert und später erneut ausgewählt werden. Zusätzlich ermittelt die Erweiterung lokal häufig verwendete Kombinationen aus Korrespondent, Tags und Dokumenttyp und kann daraus Zuordnungsvorschläge anbieten. Die Übernahme eines Vorschlags erfolgt ausschließlich nach ausdrücklicher Auswahl.
 
-```bash
-python3 -m compileall paperless_nc_import
-PYTHONPATH=. pytest -q
-```
+### Serienverarbeitung
 
-GUI starten:
+Der Serienmodus ermöglicht die nacheinander erfolgende Bearbeitung mehrerer PDFs. Jedes Dokument erhält dabei einen eigenen Titel und kann individuell geprüft und angepasst werden.
 
-```bash
-paperless-nc-import --gui
-```
+Optional übernimmt Paperless Send die Zuordnung des zuletzt angenommenen Sendeauftrags für das nächste Dokument. Dazu gehören:
 
-Systemprüfung:
+* Tags,
+* Korrespondent,
+* Dokumenttyp,
+* Speicherpfad,
+* Dokumentdatum,
+* benutzerdefinierte Feldwerte,
+* Status „Fertig zugeordnet“.
 
-```bash
-paperless-nc-import --doctor
-```
+Alle übernommenen Angaben bleiben bearbeitbar. Der Dokumenttitel wird bewusst nicht übernommen. Freigaben, lokale Löschaufträge und Nextcloud-Deck-Aktionen werden ebenfalls nicht automatisch auf das nächste Dokument übertragen.
 
-## Nautilus-Integration installieren
+Die Serienvorlage wird ausschließlich im Arbeitsspeicher gehalten. Sie wird beim Sperren der Sitzung, bei einer erneuten Anmeldung, einem Wechsel der Paperless-Instanz oder beim Beenden von Firefox verworfen.
 
-```bash
-make install-nautilus
-nautilus -q
-```
+### Dublettenprüfung
 
-Danach können Dateien im Dateimanager über das Kontextmenü an Desk Broker übergeben werden.
+Paperless Send berechnet die Prüfsumme der ausgewählten PDF und prüft, ob auf der verbundenen Paperless-Instanz bereits ein identisches Dokument vorhanden ist.
 
-## Konfiguration
+Gefundene Dubletten können vor dem Upload angezeigt und in der Vorschau betrachtet werden. Anschließend stehen mehrere Möglichkeiten zur Verfügung:
 
-Die Nutzerkonfiguration liegt standardmäßig unter:
+* Upload abbrechen,
+* vorhandenen internen Paperless-Link verwenden,
+* einen öffentlichen Freigabelink zum vorhandenen Dokument erzeugen,
+* Metadaten des vorhandenen Dokuments übernehmen,
+* das Dokument nach ausdrücklicher Bestätigung dennoch senden.
 
-```bash
-~/.config/paperless-nc-import/config.yaml
-```
+Die Prüfung erkennt identische Dateiinhalte. Inhaltlich ähnliche, neu exportierte oder technisch veränderte PDFs können unterschiedliche Prüfsummen besitzen und werden daher nicht zwingend als Dublette erkannt.
 
-Ein Beispiel befindet sich unter:
+### Dokumentvorschau
 
-```bash
-configs/config.example.yaml
-```
+Archivierte Dokumente und gefundene Dubletten können direkt in der Erweiterung betrachtet werden. Die mehrseitige Vorschau verwendet die in Firefox integrierte PDF-Anzeige. Das Blättern ist per Mausrad, Pfeiltasten sowie Bild-auf und Bild-ab möglich.
 
-Minimalstruktur:
+Paperless Send enthält keine eigene PDF-Rendering-Bibliothek. PDF-Dateien werden authentifiziert von der konfigurierten Paperless-Instanz abgerufen, als lokale Blob-URL an die Firefox-Anzeige übergeben und nur vorübergehend im Arbeitsspeicher gehalten.
 
-```yaml
-paperless:
-  url: "https://paperless.example.tld"
-  token: "PAPERLESS_API_TOKEN"
+### Öffentliche Freigabelinks
 
-nextcloud:
-  base_url: "https://cloud.example.tld"
-  local_root: "/home/user/Nextcloud"
+Nach erfolgreicher Archivierung kann die Erweiterung über die Paperless-API einen öffentlichen Freigabelink erzeugen. Unterstützt werden zeitlich begrenzte und unbefristete Freigaben sowie optional die Freigabe der Archivversion.
 
-custom:
-  custom_field_nextcloud_path_id: "14"
-  custom_field_local_path_id: ""
-  field_deck_card_url_id: null
-  field_deck_card_id_id: null
-  field_global_document_id_id: null
-  field_process_id_id: null
-```
+Der erzeugte Link wird automatisch in die Zwischenablage kopiert. Bereits archivierte Aufträge können auch nachträglich aus dem Auftragsfenster heraus freigegeben werden. Verwaltung und Widerruf der Links erfolgen weiterhin in Paperless-ngx.
 
-## Custom Fields
+### Nextcloud-Deck-Integration
 
-Desk Broker nutzt Paperless Custom Fields möglichst über IDs. Dadurch bleibt die Zuordnung stabil, auch wenn Feldnamen später geändert werden.
+Optional kann ein ausgefülltes Datumsfeld zur Erstellung einer Nextcloud-Deck-Karte verwendet werden. Die Karte enthält das ausgewählte Datum, die Dokumentinformationen und einen Link zum erfolgreich archivierten Paperless-Dokument.
 
-Beispiel:
+Die Deck-Karte wird erst erstellt, nachdem Paperless die Archivierung bestätigt hat. Schlägt nur die Deck-Verarbeitung fehl, bleibt der Paperless-Import erfolgreich und der offene Folgeschritt kann wiederholt werden, ohne das PDF erneut hochzuladen.
 
-```yaml
-custom:
-  custom_field_nextcloud_path_id: "14"
-```
+### Kontrollierte lokale Löschung
 
-Die GUI zeigt Paperless-Felder typgerecht an, zum Beispiel:
+Lokale Originaldateien können auf Wunsch nach bestätigter Verarbeitung gelöscht werden. Hierfür steht ein optionaler Native-Messaging-Dateihelfer für Windows, Debian und Ubuntu zur Verfügung.
 
-```text
-Rechnungsbetrag [#3, monetary]
-IBAN [#6, string]
-Wiedervorlage [#2, date]
-```
+Vor der Löschung werden unter anderem Pfad, Dateityp, Dateigröße und Prüfsumme geprüft. Ein Dateiname allein reicht niemals als Löschgrundlage aus. Bei einem Fehler, einem Timeout oder einer veränderten Datei bleibt das lokale Original erhalten.
 
-## Automatische Vorbelegung
+### Auftragsverwaltung
 
-Desk Broker kann Werte aus OCR- oder PDF-Texten vorschlagen. Die Werte werden zunächst nur vorbelegt. Der Nutzer entscheidet weiterhin bewusst, ob das Custom Field übernommen wird.
+Uploads und nachgelagerte Verarbeitungsschritte werden als Aufträge dargestellt. Die Erweiterung unterscheidet unter anderem zwischen:
 
-Beispiel:
+* angenommenem Upload,
+* laufender Paperless-Verarbeitung,
+* erfolgreicher Archivierung,
+* offener Freigabe,
+* offener Deck-Verarbeitung,
+* offener Entfernung von Posteingangs-Tags,
+* fehlgeschlagener oder nicht bestätigter lokaler Löschung.
 
-```text
-Fahrzeugpreis inklusive Nebenkosten: 15900,00 Euro
-```
+Fehlgeschlagene Folgeschritte können getrennt wiederholt werden. Dadurch wird verhindert, dass ein bereits erfolgreich archiviertes Dokument unbeabsichtigt erneut hochgeladen wird.
 
-kann als Kandidat für:
+## Datenschutz und Sicherheit
 
-```text
-Rechnungsbetrag / amount.total
-```
+Paperless Send kommuniziert ausschließlich mit den vom Benutzer konfigurierten Paperless- und optionalen Nextcloud-Instanzen. Es werden keine externen Analyse-, Tracking- oder Cloud-Dienste eingebunden.
 
-verwendet werden.
+Der Paperless-API-Token wird für die aktive Sitzung entsperrt. Dokumentvorschauen, Serienvorlagen und zwischengespeicherte PDF-Daten verbleiben nur vorübergehend im Arbeitsspeicher und werden bei Sitzungs- oder Instanzwechsel verworfen.
 
-Die langfristige Architektur sieht ein rollenbasiertes Extraktionssystem vor:
+Die Erweiterung verwendet eine restriktive Content Security Policy. Es gibt keinen dynamisch nachgeladenen Programmcode, kein JavaScript-`eval`, kein WebAssembly und keine verschleierten oder minifizierten Programmbestandteile. Die in der Erweiterung enthaltenen Laufzeitquellen liegen als lesbarer eigener JavaScript- und CSS-Code vor.
 
-```text
-Paperless Custom Field #3
-        ↓
-Rolle: amount.total
-        ↓
-Extractor sucht passende Beträge
-        ↓
-GUI schlägt Wert vor
-        ↓
-Nutzer bestätigt oder korrigiert
-```
+Einige Komfortfunktionen speichern lokal und getrennt nach Paperless-Adresse unter anderem Profile, Titelverläufe und häufig verwendete Zuordnungskombinationen. PDF-Inhalte und konkrete Werte benutzerdefinierter Felder werden für diese Vorschlagsfunktion nicht dauerhaft gespeichert.
 
-## Community-Lernen
+## Technische Grundlage
 
-Geplant ist ein datensparsames Community-Lernen für Extraktionsregeln.
+Paperless Send ist als klassische Firefox-WebExtension umgesetzt. Die Erweiterung greift über die REST-API auf Paperless-ngx zu und verwendet für die optionale Nextcloud-Integration die Nextcloud-Deck-API.
 
-Es werden dabei keine Dokumente, keine OCR-Volltexte, keine Beträge, keine IBANs, keine Pfade und keine IDs übertragen.
+Zielplattformen sind:
 
-Zulässiges Lernsignal wäre zum Beispiel:
+* Firefox Desktop ab Version 140,
+* Windows,
+* Debian,
+* Ubuntu.
 
-```json
-{
-  "locale": "de",
-  "field_role": "amount.total",
-  "field_type": "monetary",
-  "label_normalized": "fahrzeugpreis inklusive nebenkosten",
-  "result": "accepted"
-}
-```
+Der optionale Dateihelfer basiert auf Python und Firefox Native Messaging. Der eigentliche Erweiterungsbuild benötigt lediglich Python ab Version 3.9 und verwendet keine externen Build-Abhängigkeiten.
 
-Nicht übertragen werden:
+## Projektstand
 
-* Beträge
-* Dokumente
-* OCR-Texte
-* Dateinamen
-* Nextcloud-Pfade
-* Paperless-IDs
-* Deck-IDs
-* IBANs
-* Namen
-* Adressen
-* Aktenzeichen
+Der aktuelle Entwicklungsstand ist Version 2.4.12. Diese Version ergänzt insbesondere die bearbeitbare Übernahme der letzten Zuordnung im Serienmodus und verwendet weiterhin die native Firefox-PDF-Anzeige für mehrseitige Vorschauen.
 
-Community-Lernen ist opt-in und soll nur nach ausdrücklicher Zustimmung erfolgen.
+Die Erweiterung liegt derzeit als unsignierte XPI-Datei einschließlich vollständigem Quellpaket, Build-Skript, Tests, Prüferhinweisen und dokumentierten Testergebnissen vor. Sie ist für eine private Verteilung über Mozillas „Unlisted“-Verfahren vorbereitet.
 
-## Tests
+Eine Signierung oder Freigabe durch Mozilla ist mit dem vorliegenden Paket noch nicht erfolgt. Für eine dauerhafte Installation in regulären Firefox-Versionen muss die XPI zunächst von Mozilla geprüft und signiert werden.
 
-```bash
-python3 -m compileall paperless_nc_import
-PYTHONPATH=. pytest -q
-```
+## Abgrenzung
 
-## Entwicklung
+Paperless Send ersetzt weder Paperless-ngx noch dessen serverseitige Berechtigungs-, Workflow- oder Dublettenregeln. Die Erweiterung stellt eine komfortable, browserbasierte Erfassungs- und Verarbeitungsschicht vor der vorhandenen Paperless-API bereit.
 
-Editable Installation:
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -U pip
-pip install -e .
-```
-
-Nautilus neu installieren:
-
-```bash
-make install-nautilus
-nautilus -q
-```
-
-## Projektstatus
-
-Das Projekt befindet sich im Aufbau. Die aktuelle Linie ist:
-
-```text
-v0.7.x  GUI, Paperless-Import, Custom Fields, Nextcloud-Rückverweise
-v0.8.x  rollenbasierte Extraktion, lokales Lernen
-v0.9.x  Community-Rulesets, Deck-/E-Akten-Anbindung
-```
-
-## Lizenz
-
-Siehe `LICENSE`.
-
-# paperless-nc-import v0.7.6
-
-Python/PySide6 Import-GUI für lokale Nextcloud-Dateien nach Paperless-ngx mit OCR, Paperless-Metadaten, Nextcloud-Rückverweis und optionaler Nextcloud-Deck-Wiedervorlage.
-
-## Neu in v0.7.6
-
-- OCR-Fortschrittsanzeige in der GUI: Status, Fortschrittsbalken und laufende OCRmyPDF-Ausgabe.
-- Automatische OCR während des Imports meldet den Fortschritt ebenfalls in die GUI.
-- OCR-CPU-Nutzung besser steuerbar: `ocr.jobs: 0` lässt OCRmyPDF automatisch/mehr Kerne nutzen; feste Werte begrenzen die Last.
-- Optionales automatisches Schließen nach vollständig abgeschlossenem Import: `gui.close_after_success`, `gui.close_after_seconds`.
-
-## Neu in v0.7.5
-
-- Paperless-Rücklinkfelder: Nach erfolgreichem Import können Deck-Karten-URL, Deck-Karten-ID, globale Dokument-ID und Vorgangs-ID in Paperless-Custom-Fields geschrieben werden.
-- Globale Dokument-ID: standardmäßig `urn:paperless:{paperless_host}:document:{paperless_document_id}`.
-- Vorgangs-ID: standardmäßig gleich globale Dokument-ID; per Template anpassbar.
-- Deck-Beschreibung enthält automatisch einen stabilen Markerblock mit Paperless-Dokument-ID, globaler Dokument-ID und Vorgangs-ID.
-- Deck-Sektion in der GUI erscheint nur noch, wenn ein gültiges Wiedervorlage-Custom-Field gesetzt wurde.
-- Sidecar JSON/Markdown enthält globale Dokument-ID, Vorgangs-ID und den Status der Paperless-Rücklinkaktualisierung.
-
-## Relevante Config-Erweiterung
-
-```yaml
-custom:
-  field_deck_card_url_id: null
-  field_deck_card_id_id: null
-  field_global_document_id_id: null
-  field_process_id_id: null
-
-  global_document_id_template: "urn:paperless:{paperless_host}:document:{paperless_document_id}"
-  process_id_template: "{global_document_id}"
-
-  require_backlink_update_for_trash: false
-```
-
-Die Feld-IDs müssen die IDs deiner Paperless-Custom-Fields sein. Wenn ein Feld `null` bleibt, wird es nicht geschrieben.
-
-## Installation
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -U pip
-pip install -e .
-```
-
-Nautilus:
-
-```bash
-make install-nautilus
-nautilus -q
-```
-
-## Test
-
-```bash
-paperless-nc-import --doctor --startup-log --no-cache
-paperless-nc-import --startup-log --dry-run --gui /pfad/zur/datei.pdf
-```
-
-
-## v0.7.5: Paperless-Duplikate
-
-Wenn Paperless einen Import als Duplikat erkennt und `related_document` liefert, wird das vorhandene Paperless-Dokument als Quelle der Wahrheit verwendet. Die GUI zeigt die Attribute des vorhandenen Dokuments und fragt interaktiv, ob die lokale Quelldatei in den Papierkorb verschoben werden soll. Eine Wiedervorlage/Deck-Integration kann trotzdem gegen das bereits vorhandene Paperless-Dokument laufen.
+Die endgültige Archivierung, Volltextverarbeitung, Rechteprüfung und Dokumentverwaltung verbleiben vollständig bei Paperless-ngx. Ebenso richtet sich die Erreichbarkeit öffentlicher Freigabelinks nach der Netzwerkkonfiguration der jeweiligen Paperless-Instanz.
