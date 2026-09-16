@@ -1,0 +1,175 @@
+body {
+  width: 410px;
+  max-height: 590px;
+  overflow-y: auto;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--primary);
+  color: white;
+  padding: 16px 20px;
+}
+header strong {
+  font-size: 23px;
+}
+header small {
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+header p {
+  font-size: 11px;
+  margin: 2px 0 0;
+  opacity: 0.85;
+}
+.popup-content {
+  padding: 16px;
+}
+.popup-content > .primary {
+  margin-bottom: 12px;
+}
+.job {
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.job-top {
+  align-items: start;
+}
+.job-top h3 {
+  max-width: 240px;
+}
+.job-actions {
+  flex-wrap: wrap;
+}
+progress {
+  width: 100%;
+  height: 5px;
+  accent-color: var(--primary);
+  margin-bottom: 8px;
+}
+footer {
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--surface);
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--border);
+}
+#error:empty {
+  display: none;
+}
+
+.popup-share {
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.popup-share-label {
+  font-size: 12px;
+}
+.popup-share-choices {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.popup-share .share-shortcut {
+  font-size: 12px;
+  padding: 6px 4px;
+  min-height: 32px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.popup-share .share-shortcut:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+.popup-share p {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+}
+
+.job-top.has-thumbnail {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-rows: min-content 1fr;
+  gap: 8px 12px;
+}
+.job-thumbnail {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: block;
+  width: 120px;
+  height: 160px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: white;
+}
+.job-thumbnail[hidden] {
+  display: none;
+}
+.job-thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.job-top.has-thumbnail h3 {
+  grid-column: 2;
+  max-width: none;
+  overflow-wrap: anywhere;
+}
+.job-top.has-thumbnail .badge {
+  grid-column: 2;
+  justify-self: start;
+}
+
+.thumbnail-error {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+.job-top:has(.thumbnail-error) {
+  flex-wrap: wrap;
+}
+
+/* CSS hover also works after asynchronous loading, rerenders and popup resizing.
+   A fixed descendant escapes the thumbnail's crop and cannot steal the hover. */
+.job-thumbnail {
+  cursor: zoom-in;
+}
+.job-thumbnail:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+.job-thumbnail > .thumbnail-zoom {
+  position: fixed;
+  z-index: 1000;
+  inset: 12px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.job-thumbnail:not([data-zoom-dismissed]):is(:hover, :focus-visible)
+  > .thumbnail-zoom {
+  display: flex;
+}
+.job-thumbnail > .thumbnail-zoom > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 370px;
+  max-height: 520px;
+  object-fit: contain;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 8px 28px #0005;
+  pointer-events: none;
+}

@@ -1,0 +1,25 @@
+{
+  "version": "2.4.12",
+  "xpi_sha256": "274042ae187c3408439e294fd1da786effa4cd8c1fca2415ce95baff6990e39f",
+  "xpi_bytes": 76927,
+  "runtime_files": 18,
+  "baseline": "2.4.11",
+  "changed_runtime_files": [
+    "app.html",
+    "app.js",
+    "background.js",
+    "manifest.json"
+  ],
+  "unchanged_manifest_except_version": true,
+  "unchanged_pdf_preview": true,
+  "tests": {
+    "node_passed": 145,
+    "firefox_series": "passed",
+    "mozilla_linter": {
+      "errors": 0,
+      "notices": 0,
+      "warnings": 1
+    }
+  },
+  "packaging": "All extension/ files copied byte-for-byte; no minification, bundling, dependencies or network."
+}

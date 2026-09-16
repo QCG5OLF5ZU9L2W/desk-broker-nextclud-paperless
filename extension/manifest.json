@@ -1,0 +1,55 @@
+{
+  "manifest_version": 2,
+  "name": "Paperless Send",
+  "version": "2.4.12",
+  "description": "PDFs mit Paperless-Metadaten und Custom Fields senden, optional Deck-Karten anlegen und lokale Originale nach Best\u00e4tigung l\u00f6schen.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "paperless-send@local",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "browsingActivity",
+          "websiteContent",
+          "authenticationInfo"
+        ]
+      }
+    }
+  },
+  "permissions": [
+    "contextMenus",
+    "clipboardWrite",
+    "downloads",
+    "notifications",
+    "storage",
+    "tabs",
+    "<all_urls>"
+  ],
+  "optional_permissions": [
+    "nativeMessaging"
+  ],
+  "background": {
+    "scripts": [
+      "keyboard.js",
+      "custom-fields.js",
+      "core.js",
+      "nextcloud.js",
+      "background.js"
+    ],
+    "persistent": true
+  },
+  "browser_action": {
+    "default_title": "An Paperless senden",
+    "default_icon": "icons/paperless-send-48.png",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "48": "icons/paperless-send-48.png",
+    "96": "icons/paperless-send-96.png"
+  },
+  "options_ui": {
+    "page": "app.html#settings",
+    "open_in_tab": true
+  },
+  "content_security_policy": "script-src 'self'; object-src 'none'; frame-src blob:; base-uri 'none';"
+}

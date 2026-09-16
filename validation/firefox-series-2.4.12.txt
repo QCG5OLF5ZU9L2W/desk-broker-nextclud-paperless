@@ -1,0 +1,1 @@
+Firefox PASS: series queue, date/calendar, typed custom values, editable inheritance, latest assignment across windows, opt-out, no console errors.

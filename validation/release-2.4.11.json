@@ -1,0 +1,15 @@
+{
+  "version": "2.4.11",
+  "xpi_sha256": "1270f0fb5f1b1000cf885facd1f108561c1d32ff204cb6227a207c1e3037946c",
+  "xpi_bytes": 75450,
+  "runtime_files": 18,
+  "changed_runtime_files": [
+    "background.js",
+    "manifest.json",
+    "pdf-preview.css",
+    "pdf-preview.js"
+  ],
+  "removed_vendor_files": 201,
+  "unchanged_permissions": true,
+  "packaging": "All extension/ files copied byte-for-byte; no processing, external dependencies or network."
+}

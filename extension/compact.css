@@ -1,0 +1,96 @@
+.compact .sidebar,
+.compact footer {
+  display: none;
+}
+.compact .workspace {
+  margin: 0;
+}
+.compact .topbar {
+  height: 48px;
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  box-shadow: 0 2px 8px #10251518;
+}
+.compact main {
+  padding: 20px;
+}
+.compact .upload-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.compact .upload-grid > div,
+.compact .metadata-card {
+  width: 100%;
+}
+.compact .card {
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.compact .page-heading {
+  margin-bottom: 16px;
+  gap: 8px;
+}
+.compact h1 {
+  font-size: 23px;
+}
+.compact .page-heading p:not(#target-server) {
+  display: none;
+}
+.compact #target-server {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.compact .dropzone {
+  padding: 16px;
+}
+.compact .dropzone svg,
+.compact .dropzone h3,
+.compact .dropzone p {
+  display: none;
+}
+.compact.has-files #dropzone,
+.compact.has-files .url-box,
+.compact.has-files .source-actions {
+  display: none;
+}
+.compact .file-row:first-child {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.compact .metadata-fields {
+  margin-top: 12px;
+}
+.compact .tag-list {
+  max-height: 150px;
+}
+.compact .card-heading {
+  margin-bottom: 12px;
+}
+.compact .cleanup-card h2 {
+  display: none;
+}
+.compact .cleanup-card label {
+  margin-bottom: 6px;
+}
+.compact .submit-area {
+  position: static;
+  background: var(--surface);
+  padding: 12px 0 0;
+}
+.compact .topbar > span {
+  display: none;
+}
+.compact #quick-send {
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+@media (max-width: 480px) {
+  .compact #session-state {
+    display: none;
+  }
+}
